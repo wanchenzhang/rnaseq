@@ -11,8 +11,10 @@ include { paramsSummaryMap       } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_rnaseq_pipeline'
-
-
+include { STAR_GENOMEGENERATE } from '../modules/nf-core/star/genomegenerate/main'
+include { GFFREAD             } from '../modules/nf-core/gffread/main'
+include { STAR_ALIGN   } from '../modules/nf-core/star/align/main'
+include { SALMON_QUANT } from '../modules/nf-core/salmon/quant/main'
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     RUN MAIN WORKFLOW
@@ -27,11 +29,37 @@ workflow RNASEQ {
     multiqc_logo
     multiqc_methods_description
     outdir
+    fasta
+    gtf
 
     main:
 
     def ch_versions = channel.empty()
     def ch_multiqc_files = channel.empty()
+    //
+    // MODULES: Prepare reference index and transcript sequences
+    //
+    if (!fasta || !gtf) {
+        error 'Provide both --fasta and --gtf'
+    }
+
+    def fasta_file = file(fasta, checkIfExists: true)
+    def gtf_file   = file(gtf, checkIfExists: true)
+
+    def ch_fasta = channel.value(
+        [[id: 'reference'], fasta_file]
+    )
+
+    def ch_gtf = channel.value(
+        [[id: 'reference'], gtf_file]
+    )
+
+    STAR_GENOMEGENERATE(ch_fasta, ch_gtf)
+
+    GFFREAD(
+        ch_gtf,
+        channel.value(fasta_file)
+    )
     //
     // MODULE: Run FastQC
     //
@@ -84,6 +112,39 @@ workflow RNASEQ {
 
     ch_multiqc_files = ch_multiqc_files.mix(
         FASTQC_AFTER.out.zip.map { meta, files -> files }
+    )
+    //
+    // MODULE: Align trimmed reads with STAR
+    //
+    def ch_star_index = STAR_GENOMEGENERATE.out.index.first()
+
+    STAR_ALIGN(
+        TRIMGALORE.out.reads,
+        ch_star_index,
+        ch_gtf,
+        true
+    )
+
+    ch_multiqc_files = ch_multiqc_files.mix(
+        STAR_ALIGN.out.log_final.map { meta, log -> log }
+    )
+
+    //
+    // MODULE: Quantify transcript alignments with Salmon
+    //
+    def ch_salmon_reference = GFFREAD.out.gffread_fasta
+        .map { meta, transcript_fasta ->
+            [meta, [], gtf_file, transcript_fasta]
+        }
+        .first()
+
+    SALMON_QUANT(
+        STAR_ALIGN.out.bam_transcript,
+        ch_salmon_reference
+    )
+
+    ch_multiqc_files = ch_multiqc_files.mix(
+        SALMON_QUANT.out.results.map { meta, directory -> directory }
     )
     //
     // MODULE: MultiQC

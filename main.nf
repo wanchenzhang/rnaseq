@@ -27,7 +27,9 @@ include { getGenomeAttribute      } from './subworkflows/local/utils_nfcore_rnas
 // TODO nf-core: Remove this line if you don't need a FASTA file
 //   This is an example of how to use getGenomeAttribute() to fetch parameters
 //   from igenomes.config using `--genome`
-params.fasta = getGenomeAttribute('fasta')
+// If `--fasta` is provided, use it with priority;
+//  otherwise retrieve the value from the configuration corresponding to `--genome`.
+params.fasta = params.fasta ?: getGenomeAttribute('fasta')
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -54,6 +56,8 @@ workflow COMPUTATIONALWORKFLOWS_RNASEQ {
         params.multiqc_logo,
         params.multiqc_methods_description,
         params.outdir,
+        params.fasta,
+        params.gtf
     )
     emit:
     multiqc_report = RNASEQ.out.multiqc_report // channel: /path/to/multiqc_report.html

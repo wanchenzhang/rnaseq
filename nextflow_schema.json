@@ -48,6 +48,7 @@
             "type": "object",
             "fa_icon": "fas fa-dna",
             "description": "Reference genome related files and options required for the workflow.",
+            "required": ["gtf"],
             "properties": {
                 "genome": {
                     "type": "string",
@@ -61,8 +62,18 @@
                     "exists": true,
                     "mimetype": "text/plain",
                     "pattern": "^\\S+\\.fn?a(sta)?(\\.gz)?$",
-                    "description": "Path to FASTA genome file.",
-                    "help_text": "This parameter is *mandatory* if `--genome` is not specified. If you don't have a BWA index available this will be generated for you automatically. Combine with `--save_reference` to save BWA index for future runs.",
+                    "description": "Path to the uncompressed reference genome FASTA.",
+                    "help_text": "Used to generate the STAR index and extract transcript sequences. Must match the assembly used by the GTF annotation.",
+                    "fa_icon": "far fa-file-code"
+                },
+                "gtf": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "mimetype": "text/plain",
+                    "pattern": "^\\S+\\.gtf(\\.gz)?$",
+                    "description": "Path to the uncompressed gene annotation GTF.",
+                    "help_text": "Used by STAR and GFFREAD. Must match the reference genome assembly and chromosome names.",
                     "fa_icon": "far fa-file-code"
                 },
                 "igenomes_ignore": {
