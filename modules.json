@@ -14,6 +14,11 @@
                         "branch": "master",
                         "git_sha": "98403d15b0e50edae1f3fec5eae5e24982f1fade",
                         "installed_by": ["modules"]
+                    },
+                    "trimgalore": {
+                        "branch": "master",
+                        "git_sha": "f97696ae2ba28e94032adafea6777d7eb38d2c1d",
+                        "installed_by": ["modules"]
                     }
                 }
             },

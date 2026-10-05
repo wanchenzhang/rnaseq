@@ -4,11 +4,14 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 include { FASTQC                 } from '../modules/nf-core/fastqc/main'
+include { TRIMGALORE } from '../modules/nf-core/trimgalore/main'
+include { FASTQC as FASTQC_AFTER } from '../modules/nf-core/fastqc/main'
 include { MULTIQC                } from '../modules/nf-core/multiqc/main'
 include { paramsSummaryMap       } from 'plugin/nf-schema'
 include { paramsSummaryMultiqc   } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { softwareVersionsToYAML } from '../subworkflows/nf-core/utils_nfcore_pipeline'
 include { methodsDescriptionText } from '../subworkflows/local/utils_nfcore_rnaseq_pipeline'
+
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -63,7 +66,25 @@ workflow RNASEQ {
             sort: true,
             newLine: true
         )
+    //
+    // MODULE: Trim adapters and perform post-trimming QC
+    //
+    /*
+    Pass the raw reads to Trim Galore.
+    Add the trimming logs to the MultiQC file stream.
+    Pass the trimmed reads to a second FastQC run.
+    */
+    TRIMGALORE(ch_samplesheet)
 
+    ch_multiqc_files = ch_multiqc_files.mix(
+        TRIMGALORE.out.log.map { meta, logs -> logs }
+    )
+
+    FASTQC_AFTER(TRIMGALORE.out.reads)
+
+    ch_multiqc_files = ch_multiqc_files.mix(
+        FASTQC_AFTER.out.zip.map { meta, files -> files }
+    )
     //
     // MODULE: MultiQC
     //
