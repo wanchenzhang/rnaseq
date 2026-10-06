@@ -15,6 +15,10 @@ include { STAR_GENOMEGENERATE } from '../modules/nf-core/star/genomegenerate/mai
 include { GFFREAD             } from '../modules/nf-core/gffread/main'
 include { STAR_ALIGN   } from '../modules/nf-core/star/align/main'
 include { SALMON_QUANT } from '../modules/nf-core/salmon/quant/main'
+include { SAMTOOLS_SORT         } from '../modules/nf-core/samtools/sort/main'
+include { PICARD_MARKDUPLICATES } from '../modules/nf-core/picard/markduplicates/main'
+include { CUSTOM_TX2GENE } from '../modules/nf-core/custom/tx2gene/main'
+include { TXIMETA_TXIMPORT } from '../modules/nf-core/tximeta/tximport/main'
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     RUN MAIN WORKFLOW
@@ -116,8 +120,8 @@ workflow RNASEQ {
     //
     // MODULE: Align trimmed reads with STAR
     //
-    def ch_star_index = STAR_GENOMEGENERATE.out.index.first()
-
+    def ch_star_index = STAR_GENOMEGENERATE.out.index.first() // for multiple samples, only take the first index (they are all the same)
+    
     STAR_ALIGN(
         TRIMGALORE.out.reads,
         ch_star_index,
@@ -129,6 +133,28 @@ workflow RNASEQ {
         STAR_ALIGN.out.log_final.map { meta, log -> log }
     )
 
+
+    //
+    // MODULES: Sort genome alignments and mark duplicates
+    //
+    def ch_bam_reference = channel.value(
+        [[id: 'reference'], [], []]
+    )
+
+    SAMTOOLS_SORT(
+        STAR_ALIGN.out.bam,
+        ch_bam_reference,
+        ''
+    )
+
+    PICARD_MARKDUPLICATES(
+        SAMTOOLS_SORT.out.bam,
+        ch_bam_reference
+    )
+
+    ch_multiqc_files = ch_multiqc_files.mix(
+        PICARD_MARKDUPLICATES.out.metrics.map { meta, metrics -> metrics }
+    )
     //
     // MODULE: Quantify transcript alignments with Salmon
     //
@@ -145,6 +171,39 @@ workflow RNASEQ {
 
     ch_multiqc_files = ch_multiqc_files.mix(
         SALMON_QUANT.out.results.map { meta, directory -> directory }
+    )
+    //
+    // MODULE: Build transcript-to-gene mapping
+    //
+    def ch_tx2gene_quant = SALMON_QUANT.out.results
+        .toSortedList { a, b -> a[0].id <=> b[0].id }
+        .filter { samples -> !samples.isEmpty() }
+        .map { samples -> samples.first() }
+
+    CUSTOM_TX2GENE(
+        ch_gtf,
+        ch_tx2gene_quant,
+        'salmon',
+        'gene_id',
+        'gene_name'
+    )
+    //
+    // MODULE: Merge quantifications across samples
+    //
+    def ch_all_quants = SALMON_QUANT.out.results
+        .toSortedList { a, b -> a[0].id <=> b[0].id }
+        .filter { samples -> !samples.isEmpty() }
+        .map { samples ->
+            [
+                [id: 'salmon_merged'],
+                samples.collect { sample -> sample[1] }
+            ]
+        }
+
+    TXIMETA_TXIMPORT(
+        ch_all_quants,
+        CUSTOM_TX2GENE.out.tx2gene,
+        'salmon'
     )
     //
     // MODULE: MultiQC
@@ -173,6 +232,7 @@ workflow RNASEQ {
         }
     )
     emit:multiqc_report = MULTIQC.out.report.map { _meta, report -> [report] }.toList() // channel: /path/to/multiqc_report.html
+    gene_tpm = TXIMETA_TXIMPORT.out.tpm_gene
     versions       = ch_versions                 // channel: [ path(versions.yml) ]
 }
 
