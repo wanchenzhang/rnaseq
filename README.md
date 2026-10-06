@@ -32,7 +32,7 @@ Repository: [wanchenzhang/rnaseq](https://github.com/wanchenzhang/rnaseq).
 flowchart TD
     S[Samplesheet: sample and paired FASTQ paths] --> R[Raw paired-end reads]
     R --> Q1[FastQC: raw reads]
-    R --> T[Trim Galore]
+    R --> T[Trim Galore or fastp]
     T --> Q2[FastQC: trimmed reads]
     F[Reference genome FASTA] --> IDX[STAR genomeGenerate]
     G[Matching GTF annotation] --> IDX
@@ -182,6 +182,27 @@ To inspect the pipeline's available options:
 ```bash
 nextflow run . --help
 ```
+### Selecting the trimming tool
+
+Trim Galore is used by default:
+
+```bash
+nextflow run . -profile test,docker \
+    --trimmer trimgalore \
+    --outdir results_test_trimgalore
+```
+
+To use fastp:
+
+```bash
+nextflow run . -profile test,docker \
+    --trimmer fastp \
+    --outdir results_test_fastp
+```
+
+Both branches feed trimmed paired-end reads into the same downstream
+FastQC, STAR and Salmon workflow. Both were tested successfully on
+the three-sample yeast dataset.
 
 ### Outputs
 

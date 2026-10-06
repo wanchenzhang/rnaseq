@@ -5,6 +5,7 @@
 */
 include { FASTQC                 } from '../modules/nf-core/fastqc/main'
 include { TRIMGALORE } from '../modules/nf-core/trimgalore/main'
+include { FASTP } from '../modules/nf-core/fastp/main'
 include { FASTQC as FASTQC_AFTER } from '../modules/nf-core/fastqc/main'
 include { MULTIQC                } from '../modules/nf-core/multiqc/main'
 include { paramsSummaryMap       } from 'plugin/nf-schema'
@@ -99,20 +100,46 @@ workflow RNASEQ {
             newLine: true
         )
     //
-    // MODULE: Trim adapters and perform post-trimming QC
+    // MODULES: Select trimming tool and run post-trimming QC
     //
-    /*
-    Pass the raw reads to Trim Galore.
-    Add the trimming logs to the MultiQC file stream.
-    Pass the trimmed reads to a second FastQC run.
-    */
-    TRIMGALORE(ch_samplesheet)
+    def ch_trimmed_reads
 
-    ch_multiqc_files = ch_multiqc_files.mix(
-        TRIMGALORE.out.log.map { meta, logs -> logs }
-    )
+    if (params.trimmer == 'trimgalore') {
 
-    FASTQC_AFTER(TRIMGALORE.out.reads)
+        TRIMGALORE(ch_samplesheet)
+
+        ch_trimmed_reads = TRIMGALORE.out.reads
+
+        ch_multiqc_files = ch_multiqc_files.mix(
+            TRIMGALORE.out.log.map { meta, logs -> logs }
+        )
+
+    } else if (params.trimmer == 'fastp') {
+
+        // FASTP requires [meta, reads, adapter_fasta].
+        // An empty list means no custom adapter FASTA is provided.
+        def ch_fastp_input = ch_samplesheet.map { meta, reads ->
+            [meta, reads, []]
+        }
+
+        FASTP(
+            ch_fastp_input,
+            false,  // Keep passing trimmed reads
+            false,  // Do not save failed reads
+            false   // Do not merge paired reads
+        )
+
+        ch_trimmed_reads = FASTP.out.reads
+
+        ch_multiqc_files = ch_multiqc_files.mix(
+            FASTP.out.json.map { meta, report -> report }
+        )
+
+    } else {
+        error "Invalid --trimmer '${params.trimmer}'. Choose 'trimgalore' or 'fastp'."
+    }
+
+    FASTQC_AFTER(ch_trimmed_reads)
 
     ch_multiqc_files = ch_multiqc_files.mix(
         FASTQC_AFTER.out.zip.map { meta, files -> files }
@@ -123,7 +150,7 @@ workflow RNASEQ {
     def ch_star_index = STAR_GENOMEGENERATE.out.index.first() // for multiple samples, only take the first index (they are all the same)
     
     STAR_ALIGN(
-        TRIMGALORE.out.reads,
+        ch_trimmed_reads,
         ch_star_index,
         ch_gtf,
         true
