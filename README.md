@@ -323,11 +323,6 @@ computational-workflows/rnaseq was developed by **Wanchen Zhang and Kritika Mann
 
 We acknowledge the nf-core community for the template, reusable modules and public test datasets, and the developers of the tools integrated into this workflow.
 
-## Contributions and Support
-
-For contributions, see the [contributing guidelines](docs/CONTRIBUTING.md). Report reproducible problems through the [repository issue tracker](https://github.com/wanchenzhang/rnaseq/issues).
-
-When reporting an error, include the command, Nextflow version, execution profile and relevant error message. Describe the sample/reference setup and available resources. Remove credentials and sensitive information from logs before sharing them.
 
 ## Citations
 
