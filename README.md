@@ -11,7 +11,6 @@
 
 Repository: [wanchenzhang/rnaseq](https://github.com/wanchenzhang/rnaseq).
 
-This is a custom course pipeline built with nf-core components; it is not the official nf-core/rnaseq pipeline. Docker has been tested locally. CI, linting, alternative execution profiles and a Zenodo release have not been verified for this documentation.
 
 ### Pipeline steps
 
@@ -113,7 +112,7 @@ The reference FASTA and GTF are the Ensembl R64-1-1 yeast reference distributed 
 - [Genome FASTA](https://ngi-igenomes.s3.amazonaws.com/igenomes/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Sequence/WholeGenomeFasta/genome.fa)
 - [Annotation GTF](https://ngi-igenomes.s3.amazonaws.com/igenomes/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Annotation/Genes/genes.gtf)
 
-These reference URLs are public but are not content-pinned. Preserve reference checksums when preparing a frozen release. The iGenomes annotation differs from the Ensembl release 110 annotation used in earlier local yeast runs.
+
 
 The subsets are intended to verify pipeline execution and multiple-sample aggregation. They are not sufficient evidence for biological conclusions about treatment effects.
 
@@ -350,4 +349,4 @@ This pipeline uses code and infrastructure developed and maintained by the [nf-c
 >
 > *Nature Biotechnology* (2020). doi: [10.1038/s41587-020-0439-x](https://doi.org/10.1038/s41587-020-0439-x).
 
-The project is licensed under the [MIT License](LICENSE). No project Zenodo DOI is currently documented.
+The project is licensed under the [MIT License](LICENSE).
