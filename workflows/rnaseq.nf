@@ -4,8 +4,8 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 include { FASTQC                 } from '../modules/nf-core/fastqc/main'
+include { CAT_FASTQ } from '../modules/nf-core/cat/fastq/main'
 include { TRIMGALORE } from '../modules/nf-core/trimgalore/main'
-include { FASTP } from '../modules/nf-core/fastp/main'
 include { FASTQC as FASTQC_AFTER } from '../modules/nf-core/fastqc/main'
 include { MULTIQC                } from '../modules/nf-core/multiqc/main'
 include { paramsSummaryMap       } from 'plugin/nf-schema'
@@ -40,6 +40,12 @@ workflow RNASEQ {
 
     def ch_versions = channel.empty()
     def ch_multiqc_files = channel.empty()
+    //
+    // Merge sequencing runs for each sample
+    //
+    CAT_FASTQ(ch_samplesheet)
+
+    def ch_reads = CAT_FASTQ.out.reads
     //
     // MODULES: Prepare reference index and transcript sequences
     //
@@ -94,7 +100,7 @@ workflow RNASEQ {
     //
     // MODULE: Run FastQC
     //
-    FASTQC(ch_samplesheet)
+    FASTQC(ch_reads)
     ch_multiqc_files = ch_multiqc_files.mix(FASTQC.out.zip.map{ _meta, file -> file })
 
     //
@@ -126,44 +132,15 @@ workflow RNASEQ {
             newLine: true
         )
     //
-    // MODULES: Select trimming tool and run post-trimming QC
+    // Trim adapters and filter reads with Trim Galore
     //
-    def ch_trimmed_reads
+    TRIMGALORE(ch_reads)
 
-    if (params.trimmer == 'trimgalore') {
+    def ch_trimmed_reads = TRIMGALORE.out.reads
 
-        TRIMGALORE(ch_samplesheet)
-
-        ch_trimmed_reads = TRIMGALORE.out.reads
-
-        ch_multiqc_files = ch_multiqc_files.mix(
-            TRIMGALORE.out.log.map { meta, logs -> logs }
-        )
-
-    } else if (params.trimmer == 'fastp') {
-
-        // FASTP requires [meta, reads, adapter_fasta].
-        // An empty list means no custom adapter FASTA is provided.
-        def ch_fastp_input = ch_samplesheet.map { meta, reads ->
-            [meta, reads, []]
-        }
-
-        FASTP(
-            ch_fastp_input,
-            false,  // Keep passing trimmed reads
-            false,  // Do not save failed reads
-            false   // Do not merge paired reads
-        )
-
-        ch_trimmed_reads = FASTP.out.reads
-
-        ch_multiqc_files = ch_multiqc_files.mix(
-            FASTP.out.json.map { meta, report -> report }
-        )
-
-    } else {
-        error "Invalid --trimmer '${params.trimmer}'. Choose 'trimgalore' or 'fastp'."
-    }
+    ch_multiqc_files = ch_multiqc_files.mix(
+        TRIMGALORE.out.log.map { meta, logs -> logs }
+    )
 
     FASTQC_AFTER(ch_trimmed_reads)
 

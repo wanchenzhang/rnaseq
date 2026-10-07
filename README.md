@@ -7,32 +7,33 @@
 
 ## Introduction
 
-**computational-workflows/rnaseq** is a bioinformatics pipeline for processing paired-end RNA-sequencing data. It performs quality control, adapter trimming, STAR alignment, duplicate marking and Salmon quantification, and produces a gene-by-sample TPM matrix. The pipeline was developed for the Computational Workflows course using the nf-core template and reusable nf-core modules, with Docker containers and Nextflow execution reports to support reproducibility.
+**computational-workflows/rnaseq** is a bioinformatics pipeline for processing single-end and paired-end RNA-sequencing data. It performs quality control, adapter trimming, STAR alignment, duplicate marking and Salmon quantification, and produces a gene-by-sample TPM matrix. The pipeline was developed for the Computational Workflows course using the nf-core template and reusable nf-core modules, with Docker containers and Nextflow execution reports to support reproducibility.
 
 Repository: [wanchenzhang/rnaseq](https://github.com/wanchenzhang/rnaseq).
 
 
 ### Pipeline steps
 
-1. Validate the samplesheet and create sample input channels.
-2. Assess raw-read quality with **FastQC**.
-3. Trim adapters and filter reads with **Trim Galore** (default) or **fastp**, selected using `--trimmer`.
-4. Assess trimmed-read quality with **FastQC**.
-5. Build a reference index with **STAR genomeGenerate**. Use the supplied `--transcript_fasta`, or generate transcript sequences with **GFFREAD** when it is not supplied.
-6. Align trimmed reads with **STAR**, producing a coordinate-sorted genome BAM and a transcriptome BAM.
-7. Mark duplicates in the coordinate-sorted genome BAM with **Picard MarkDuplicates**. Sorting is performed inside STAR; no separate samtools sort process is run.
-8. Quantify transcriptome alignments with **Salmon**.
-9. Generate a transcript-to-gene mapping with **CUSTOM_TX2GENE** and aggregate all samples with **TXIMETA_TXIMPORT**.
-10. Combine available quality-control metrics in **MultiQC** and save software versions and execution records.
+1. Validate the samplesheet and group sequencing runs by sample.
+2. Merge FASTQ files from the same sample with **CAT_FASTQ**, keeping paired-end R1 and R2 files separate.
+3. Assess input-read quality with **FastQC**.
+4. Trim adapters and filter reads with **Trim Galore**.
+5. Assess trimmed-read quality with **FastQC**.
+6. Build a reference index with **STAR genomeGenerate**. Use the supplied `--transcript_fasta`, or generate transcript sequences with **GFFREAD** when it is not supplied.
+7. Align trimmed reads with **STAR**, producing a coordinate-sorted genome BAM and a transcriptome BAM.
+8. Mark duplicates in the coordinate-sorted genome BAM with **Picard MarkDuplicates**.
+9. Quantify transcriptome alignments with **Salmon**.
+10. Generate a transcript-to-gene mapping with **CUSTOM_TX2GENE**, aggregate samples with **TXIMETA_TXIMPORT**, and collect available QC metrics with **MultiQC**.
 
 ### Workflow map
 
 
 ```mermaid
 flowchart TD
-    S[Samplesheet: sample and paired FASTQ paths] --> R[Raw paired-end reads]
+    S[Samplesheet: sample and FASTQ paths] --> C[CAT_FASTQ: merge runs by sample]
+    C --> R[Single-end reads or paired R1 and R2]
     R --> Q1[FastQC: raw reads]
-    R --> T[Trim Galore or fastp]
+    R --> T[Trim Galore]
     T --> Q2[FastQC: trimmed reads]
     F[Reference genome FASTA] --> IDX[STAR genomeGenerate]
     G[Matching GTF annotation] --> IDX
@@ -86,7 +87,7 @@ Solid arrows show data flow. Dashed arrows show metrics or logs supplied to Mult
 
 Docker is the execution profile validated for this project. Other profiles inherited from the template have not been validated here.
 
-The test profile limits each task to at most **4 CPUs, 4 GB RAM and one hour**, with at most two local tasks running concurrently. These are per-task limits, not a 4 GB limit for the entire run. Allow additional memory for Nextflow, Docker and the operating system.
+The test profile limits each task to at most **4 CPUs, 4 GB RAM and one hour**. These are per-task limits, not a 4 GB limit for the entire run; simultaneous tasks can use more memory. Allow additional memory for Nextflow, Docker and the operating system.
 
 ### Quick start: complete integration test
 
@@ -97,42 +98,38 @@ cd rnaseq
 nextflow run . -profile test,docker --outdir results_test
 ```
 
-The test profile provides the samplesheet, FASTA and GTF automatically. No personal filesystem paths or separately prepared local reference files are required. Run the first validation without `-resume`.
+The test profile provides a public samplesheet, genome FASTA, GTF and transcript FASTA automatically. Since the transcript FASTA is supplied, the default test skips GFFREAD. No personal filesystem paths or separately prepared local reference files are required. Run the first validation without `-resume`.
 
 #### Test dataset
 
-The test uses three paired-end Saccharomyces cerevisiae subsets from GSE110004, distributed by nf-core/test-datasets:
+The current `conf/test.config` uses the RNA-seq test files from [nf-core/test-datasets](https://github.com/nf-core/test-datasets/tree/rnaseq):
 
-| Sample | Run accession | Input read pairs |
-|---|---|---:|
-| WT_REP1 | SRR6357070 | 50,000 |
-| WT_REP2 | SRR6357072 | 50,000 |
-| RAP1_IAA_30M_REP1 | SRR6357076 | 50,000 |
+- [Samplesheet](https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/samplesheet/v3.10/samplesheet_test.csv)
+- [Genome FASTA](https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/reference/genome.fasta)
+- [GTF annotation](https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/reference/genes.gtf)
+- [Transcript FASTA](https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/reference/transcriptome.fasta)
 
-FASTQ URLs in `assets/samplesheet_test.csv` are pinned to test-datasets commit `cad884e7fbe5617dcd55bdd07d9ddf65b54febe4`.
+The samplesheet contains yeast RNA-seq subsets from GSE110004, including single-end inputs and multiple sequencing runs for some samples:
 
-The reference FASTA and GTF are the Ensembl R64-1-1 yeast reference distributed through iGenomes:
+| Sample | Runs | Input type |
+|---|---|---|
+| WT_REP1 | SRR6357070, SRR6357071 | Paired-end; two runs |
+| WT_REP2 | SRR6357072 | Paired-end; one run |
+| RAP1_UNINDUCED_REP1 | SRR6357073 | Single-end; one run |
+| RAP1_UNINDUCED_REP2 | SRR6357074, SRR6357075 | Single-end; two runs |
+| RAP1_IAA_30M_REP1 | SRR6357076 | Paired-end; one run |
 
-- [Genome FASTA](https://ngi-igenomes.s3.amazonaws.com/igenomes/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Sequence/WholeGenomeFasta/genome.fa)
-- [Annotation GTF](https://ngi-igenomes.s3.amazonaws.com/igenomes/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Annotation/Genes/genes.gtf)
+Seven samplesheet rows are grouped into five samples. CAT_FASTQ concatenates all R1 files and all R2 files separately for paired-end samples, or all reads for single-end samples. The samplesheet's `strandedness` column is not used by this implementation; Salmon currently infers library type using `--libType A`.
 
+These URLs follow the repository's `rnaseq` branch and can change. The small reference files and read subsets are for workflow testing, not a complete biological analysis.
 
+#### Validation status
 
-The subsets are intended to verify pipeline execution and multiple-sample aggregation. They are not sufficient evidence for biological conclusions about treatment effects.
+An earlier three-sample paired-end test completed successfully on 6 October 2026, producing a 7,126-gene TPM matrix and the expected BAM, quantification and QC outputs. Those results used a different test reference setup.
 
-#### Previous validation results
+The current version adds multi-run FASTQ merging, STAR internal sorting and an optional transcript FASTA. Re-run the current test before reporting it as validated. Its five-sample matrix and gene count should be checked against the current inputs rather than the earlier test results.
 
-Before the STAR internal sorting and optional transcript FASTA changes, a local Docker test completed successfully on **6 October 2026**:
-
-- 26 tasks completed across the full workflow.
-- All three samples produced duplicate-marked BAM files, indexes and metrics.
-- The merged gene TPM matrix contained 7,126 genes and the three expected sample columns.
-- Each sample's gene TPM sum was 1,000,000.00 at the reported precision.
-- MultiQC, software-version records and Nextflow execution reports were generated.
-
-These results describe the earlier workflow version. Re-run the test and output validator after the sorting and reference-input changes before reporting validation of the updated workflow. The gene count is specific to this reference and annotation.
-
-### Running your own paired-end samples
+### Running your own samples
 
 #### 1. Prepare a samplesheet
 
@@ -144,9 +141,9 @@ SAMPLE_A,/absolute/path/SAMPLE_A_1.fastq.gz,/absolute/path/SAMPLE_A_2.fastq.gz
 SAMPLE_B,/absolute/path/SAMPLE_B_1.fastq.gz,/absolute/path/SAMPLE_B_2.fastq.gz
 ```
 
-Each row represents one sample and its matched R1/R2 FASTQ pair. Use unique sample names without spaces. FASTQ filenames must end in `.fastq.gz` or `.fq.gz`. Public HTTPS URLs can also be used, as demonstrated by the test samplesheet.
+Each row represents one sequencing run. Supply R1 and R2 for paired-end runs; leave `fastq_2` empty for single-end runs. Use sample names without spaces. Repeat the same sample name for multiple runs of that sample; they will be merged before trimming. Different biological samples must have different names. Do not mix single-end and paired-end runs under one sample name. FASTQ filenames must end in `.fastq.gz` or `.fq.gz`. Public HTTPS URLs can also be used, as demonstrated by the test samplesheet.
 
-For local data, absolute paths avoid ambiguity about the launch directory. Keep the matching R1 and R2 files together in the same row. Single-end inputs and multiple lanes per sample have not been validated for this project.
+For local data, absolute paths avoid ambiguity about the launch directory. Keep matching R1 and R2 files together in the same row. A single-end row can be written as `SAMPLE_C,/absolute/path/SAMPLE_C.fastq.gz,`. The current workflow includes single-end and multi-run input handling; verify these paths with the current test before using larger datasets.
 
 #### 2. Provide matching references
 
@@ -196,7 +193,6 @@ Do not add the `test` profile for your own dataset unless you intentionally want
 | `--fasta` | Reference genome FASTA |
 | `--gtf` | Matching gene annotation GTF |
 | `--transcript_fasta` | Optional matching transcript FASTA; skips GFFREAD when supplied |
-| `--trimmer` | `trimgalore` (default) or `fastp` |
 | `--outdir` | Published output directory |
 | `--multiqc_title` | Optional MultiQC report title |
 | `-profile docker` | Container execution profile |
@@ -207,28 +203,6 @@ To inspect the pipeline's available options:
 ```bash
 nextflow run . --help
 ```
-### Selecting the trimming tool
-
-Trim Galore is used by default:
-
-```bash
-nextflow run . -profile test,docker \
-    --trimmer trimgalore \
-    --outdir results_test_trimgalore
-```
-
-To use fastp:
-
-```bash
-nextflow run . -profile test,docker \
-    --trimmer fastp \
-    --outdir results_test_fastp
-```
-
-Both branches feed trimmed paired-end reads into the same downstream
-FastQC, STAR and Salmon workflow. Both were tested successfully on
-the three-sample yeast dataset.
-
 ### Outputs
 
 Paths below are relative to the selected output directory:
@@ -236,8 +210,8 @@ Paths below are relative to the selected output directory:
 | Directory | Contents |
 |---|---|
 | `fastqc/` | Raw-read FastQC HTML and ZIP reports |
-| `trimgalore/` | Trimmed FASTQ files and trimming reports when Trim Galore is selected |
-| `fastp/` | Trimmed FASTQ, JSON, HTML and log files when fastp is selected |
+| `cat/` | FASTQ files merged by sample using CAT_FASTQ |
+| `trimgalore/` | Trimmed FASTQ files and available trimming reports |
 | `fastqc_after/` | FastQC reports for trimmed reads |
 | `reference/star/` | Generated STAR genome index |
 | `reference/transcripts/` | Generated transcript FASTA; produced only when GFFREAD runs |
@@ -259,37 +233,12 @@ tximport/salmon_merged.gene_tpm.tsv
 It is a tab-separated table with one row per gene:
 
 ```text
-gene_id    gene_name    RAP1_IAA_30M_REP1    WT_REP1    WT_REP2
+gene_id    gene_name    SAMPLE_A    SAMPLE_B
 ```
 
 Sample columns are assembled in sample-ID order. Gene names can be missing where the reference does not provide them. Zero TPM indicates no estimated abundance for that gene in the corresponding sample; it does not by itself establish biological absence.
 
 Additional outputs include gene counts, scaled count matrices, gene lengths, transcript TPM and transcript counts. Salmon-derived counts are estimated abundances, not necessarily integer read counts. TPM describes relative abundance; this pipeline does not perform differential-expression testing.
-
-### Output validation
-
-After a successful run, validate the published outputs:
-
-```bash
-python bin/validate_outputs.py \
-    --samplesheet assets/samplesheet_test.csv \
-    --outdir results_test_fastp \
-    --trimmer fastp
-```
-
-For the Trim Galore branch, use `--trimmer trimgalore` and its
-corresponding output directory.
-
-The script checks sample columns, unique gene IDs, finite non-negative
-TPM values, paired FASTQ structure and matching read IDs, and the
-presence of non-empty key output files. TPM sums are reported as an
-informational normalization check.
-
-Results are written to `<outdir>/validation_report.tsv`.
-Failed checks return a non-zero exit code. BAM and index checks verify
-file existence and size, not internal integrity.
-
-Before the latest sorting and reference-input changes, both trimming branches passed all 21 checks. Run the validator again on the updated workflow outputs.
 
 ### Checking a completed test
 
@@ -300,9 +249,9 @@ ls -lh results_test/multiqc/multiqc_report.html
 ls -lh results_test/pipeline_info/
 ```
 
-Confirm that the matrix has the three expected sample columns and that each sample has a marked BAM, index and metrics file. Open the MultiQC report to inspect quality metrics rather than relying solely on task completion.
+For the current official samplesheet, confirm that the TPM matrix contains the five sample columns listed above. Check that each sample has a duplicate-marked BAM, index, Picard metrics and Salmon `quant.sf`. Also inspect FastQC and MultiQC, since successful task completion does not establish data quality.
 
-For this three-sample dataset, check gene counts and TPM sums with:
+Check gene counts and TPM sums with:
 
 ```bash
 awk -F '\t' '
@@ -321,7 +270,13 @@ END {
 }' results_test/tximport/salmon_merged.gene_tpm.tsv
 ```
 
-The observed test sums were approximately one million per sample. This check alone does not establish complete transcript-to-gene mapping or biological validity.
+TPM sums are a normalization check; they do not establish complete transcript-to-gene mapping or biological validity.
+
+#### Output validation script
+
+`bin/validate_outputs.py` was written for the earlier one-row-per-sample paired-end dataset. It checks TPM structure and values, paired FASTQ records and read IDs, and non-empty key output files. BAM checks cover existence and size, not internal format integrity.
+
+The script still needs updating for the current single-end inputs, repeated sample IDs and CAT_FASTQ-derived output names. Do not use the earlier 21-pass result as evidence that the current five-sample test passed validation.
 
 ### Interpreting quality-control results
 
@@ -372,11 +327,13 @@ nextflow.config          Parameters, execution profiles and reporting
 nextflow_schema.json     Parameter validation
 workflows/rnaseq.nf      Connections between analysis modules
 conf/modules.config     Module options, resources and publishing paths
-conf/test.config        Public three-sample yeast test profile
+conf/test.config        Public five-sample yeast test profile
 assets/schema_input.json
                         Samplesheet validation
 assets/samplesheet_test.csv
-                        Public test FASTQ URLs
+                        Earlier three-sample example (not the current test default)
+bin/validate_outputs.py
+                        Output validator for the earlier paired-end test
 modules/nf-core/        Reused tool modules
 subworkflows/           Initialisation, completion and utility workflows
 ```
@@ -403,15 +360,14 @@ Tool-specific references are listed in [CITATIONS.md](CITATIONS.md). When descri
 | Nextflow | [Nextflow](https://www.nextflow.io/) |
 | FastQC | [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) |
 | Trim Galore | [Trim Galore](https://github.com/FelixKrueger/TrimGalore) |
-| fastp | [fastp](https://github.com/OpenGene/fastp) |
 | STAR | [STAR](https://github.com/alexdobin/STAR) |
 | GFFREAD | [GFFREAD](https://github.com/gpertea/gffread) |
-| samtools (included in the STAR module environment) | [samtools](https://www.htslib.org/) |
 | Picard | [Picard](https://broadinstitute.github.io/picard/) |
 | Salmon | [Salmon](https://combine-lab.github.io/salmon/) |
 | tximport / tximeta | [tximport](https://bioconductor.org/packages/tximport/), [tximeta](https://bioconductor.org/packages/tximeta/) |
 | MultiQC | [MultiQC](https://multiqc.info/) |
-| Test reads | [Pinned nf-core test dataset](https://github.com/nf-core/test-datasets/tree/cad884e7fbe5617dcd55bdd07d9ddf65b54febe4/testdata/GSE110004), [GSE110004](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE110004) |
+| CAT_FASTQ | [nf-core cat/fastq module](https://github.com/nf-core/modules/tree/master/modules/nf-core/cat/fastq) |
+| Test reads and references | [nf-core RNA-seq test datasets](https://github.com/nf-core/test-datasets/tree/rnaseq), [GSE110004](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE110004) |
 
 This pipeline uses code and infrastructure developed and maintained by the [nf-core](https://nf-co.re) community, reused under the MIT license.
 
