@@ -16,11 +16,11 @@ Repository: [wanchenzhang/rnaseq](https://github.com/wanchenzhang/rnaseq).
 
 1. Validate the samplesheet and create sample input channels.
 2. Assess raw-read quality with **FastQC**.
-3. Trim adapters and low-quality read ends with **Trim Galore**.
+3. Trim adapters and filter reads with **Trim Galore** (default) or **fastp**, selected using `--trimmer`.
 4. Assess trimmed-read quality with **FastQC**.
-5. Build a reference index with **STAR genomeGenerate** and extract transcript sequences with **GFFREAD**.
-6. Align trimmed reads to the reference with **STAR**, producing genome and transcriptome BAM files.
-7. Sort genome alignments with **samtools sort** and mark duplicates with **Picard MarkDuplicates**.
+5. Build a reference index with **STAR genomeGenerate**. Use the supplied `--transcript_fasta`, or generate transcript sequences with **GFFREAD** when it is not supplied.
+6. Align trimmed reads with **STAR**, producing a coordinate-sorted genome BAM and a transcriptome BAM.
+7. Mark duplicates in the coordinate-sorted genome BAM with **Picard MarkDuplicates**. Sorting is performed inside STAR; no separate samtools sort process is run.
 8. Quantify transcriptome alignments with **Salmon**.
 9. Generate a transcript-to-gene mapping with **CUSTOM_TX2GENE** and aggregate all samples with **TXIMETA_TXIMPORT**.
 10. Combine available quality-control metrics in **MultiQC** and save software versions and execution records.
@@ -36,17 +36,21 @@ flowchart TD
     T --> Q2[FastQC: trimmed reads]
     F[Reference genome FASTA] --> IDX[STAR genomeGenerate]
     G[Matching GTF annotation] --> IDX
-    F --> GF[GFFREAD: transcript FASTA]
+    P{Transcript FASTA supplied?}
+    P -->|Yes| PROVIDED[Provided transcript FASTA]
+    P -->|No| GF[GFFREAD: generate transcript FASTA]
+    F --> GF
     G --> GF
+    PROVIDED --> TF[Transcript FASTA for Salmon]
+    GF --> TF
     IDX --> A[STAR alignment]
     T --> A
-    A --> GB[Genome BAM]
-    GB --> SO[samtools sort]
-    SO --> MD[Picard MarkDuplicates]
+    A --> GB[Coordinate-sorted genome BAM]
+    GB --> MD[Picard MarkDuplicates]
     MD --> MB[Duplicate-marked BAM, index and metrics]
     A --> TB[Transcriptome BAM]
     TB --> SA[Salmon: alignment-based quantification]
-    GF --> SA
+    TF --> SA
     G --> SA
     SA --> QU[Per-sample quantifications]
     QU --> TX[CUSTOM_TX2GENE]
@@ -64,7 +68,7 @@ flowchart TD
 
 Solid arrows show data flow. Dashed arrows show metrics or logs supplied to MultiQC; whether a section appears depends on parser support and the available files.
 
-**Duplicate marking and expression quantification are separate branches.** Picard marks duplicates in the genome BAM and retains them (`REMOVE_DUPLICATES=false`). Salmon uses STAR's transcriptome BAM, not the duplicate-marked genome BAM. Duplicate marking therefore does not alter the current TPM calculation.
+**Duplicate marking and expression quantification are separate branches.** Picard marks duplicates in STAR's coordinate-sorted genome BAM and retains them (`REMOVE_DUPLICATES=false`). Salmon uses STAR's transcriptome BAM, not the duplicate-marked genome BAM. Duplicate marking therefore does not alter the current TPM calculation.
 
 ## Usage
 
@@ -116,9 +120,9 @@ The reference FASTA and GTF are the Ensembl R64-1-1 yeast reference distributed 
 
 The subsets are intended to verify pipeline execution and multiple-sample aggregation. They are not sufficient evidence for biological conclusions about treatment effects.
 
-#### Observed validation
+#### Previous validation results
 
-A local Docker test completed successfully on **6 October 2026**:
+Before the STAR internal sorting and optional transcript FASTA changes, a local Docker test completed successfully on **6 October 2026**:
 
 - 26 tasks completed across the full workflow.
 - All three samples produced duplicate-marked BAM files, indexes and metrics.
@@ -126,7 +130,7 @@ A local Docker test completed successfully on **6 October 2026**:
 - Each sample's gene TPM sum was 1,000,000.00 at the reported precision.
 - MultiQC, software-version records and Nextflow execution reports were generated.
 
-This is evidence from the observed integration run, not a claim that automated CI tests have passed. The gene count is specific to this reference, annotation and aggregation setup.
+These results describe the earlier workflow version. Re-run the test and output validator after the sorting and reference-input changes before reporting validation of the updated workflow. The gene count is specific to this reference and annotation.
 
 ### Running your own paired-end samples
 
@@ -146,13 +150,20 @@ For local data, absolute paths avoid ambiguity about the launch directory. Keep 
 
 #### 2. Provide matching references
 
-Use an uncompressed genome FASTA (`.fa` or `.fasta`) and GTF (`.gtf`) from the same species and genome assembly, with compatible chromosome names. These formats are used by the validated configuration.
+Provide an uncompressed genome FASTA (`.fa` or `.fasta`) and GTF (`.gtf`) from the same species and genome assembly, with compatible chromosome names.
+
+A transcript FASTA is optional:
+
+- Without `--transcript_fasta`, GFFREAD extracts spliced transcript sequences from the genome FASTA and GTF.
+- With `--transcript_fasta`, the supplied file is passed to Salmon and GFFREAD is skipped.
+
+The supplied transcript FASTA must use transcript IDs and sequences compatible with STAR's transcriptome alignments and the GTF. It must contain transcript sequences, not whole chromosome sequences. Genome FASTA and GTF are still required for STAR even when transcript FASTA is supplied.
 
 #### 3. Check resource and indexing settings
 
 Inspect `conf/modules.config` before running another organism. It currently includes a yeast-oriented STAR `--genomeSAindexNbases 10` setting and `--sjdbOverhang 149`. The test profile overrides the overhang to 100 for its 101 bp reads. Set the overhang according to the intended read length and choose a suitable index setting for your genome.
 
-The current non-test STAR resource requests are 8 CPUs and 20 GB RAM. These requests are not a guarantee that a larger genome will fit: review resource requirements for the chosen reference and available machine memory.
+The current non-test STAR resource requests are 8 CPUs and 20 GB RAM. STAR uses `--outSAMtype BAM SortedByCoordinate` for internal sorting and `--quantMode TranscriptomeSAM` for the BAM used by Salmon. The configured `--limitBAMsortRAM 1000000000` allows approximately 1 GB for sorting; it is not the total STAR memory limit. Review both task memory and sorting memory when using larger datasets or another organism.
 
 #### 4. Run the pipeline
 
@@ -165,6 +176,18 @@ nextflow run . \
     --outdir results
 ```
 
+To use an existing matching transcript FASTA, add the optional parameter:
+
+```bash
+nextflow run . \
+    -profile docker \
+    --input samplesheet.csv \
+    --fasta /absolute/path/reference.fa \
+    --gtf /absolute/path/annotation.gtf \
+    --transcript_fasta /absolute/path/transcripts.fasta \
+    --outdir results_provided_transcripts
+```
+
 Do not add the `test` profile for your own dataset unless you intentionally want its reference and resource settings.
 
 | Parameter | Purpose |
@@ -172,6 +195,8 @@ Do not add the `test` profile for your own dataset unless you intentionally want
 | `--input` | Samplesheet CSV |
 | `--fasta` | Reference genome FASTA |
 | `--gtf` | Matching gene annotation GTF |
+| `--transcript_fasta` | Optional matching transcript FASTA; skips GFFREAD when supplied |
+| `--trimmer` | `trimgalore` (default) or `fastp` |
 | `--outdir` | Published output directory |
 | `--multiqc_title` | Optional MultiQC report title |
 | `-profile docker` | Container execution profile |
@@ -211,12 +236,12 @@ Paths below are relative to the selected output directory:
 | Directory | Contents |
 |---|---|
 | `fastqc/` | Raw-read FastQC HTML and ZIP reports |
-| `trimgalore/` | Trimmed FASTQ files and available trimming reports |
+| `trimgalore/` | Trimmed FASTQ files and trimming reports when Trim Galore is selected |
+| `fastp/` | Trimmed FASTQ, JSON, HTML and log files when fastp is selected |
 | `fastqc_after/` | FastQC reports for trimmed reads |
 | `reference/star/` | Generated STAR genome index |
-| `reference/transcripts/` | Transcript FASTA generated by GFFREAD |
-| `star/` | STAR alignment files and logs, including transcriptome BAM |
-| `samtools_sort/` | Coordinate-sorted genome BAM files |
+| `reference/transcripts/` | Generated transcript FASTA; produced only when GFFREAD runs |
+| `star/` | Coordinate-sorted genome BAM (`*.Aligned.sortedByCoord.out.bam`), transcriptome BAM and STAR logs |
 | `markduplicates/` | Duplicate-marked BAM files, indexes and Picard metrics |
 | `salmon/<sample>/` | Per-sample Salmon quantification outputs |
 | `tximport/` | Transcript-to-gene mapping and merged abundance matrices |
@@ -240,6 +265,31 @@ gene_id    gene_name    RAP1_IAA_30M_REP1    WT_REP1    WT_REP2
 Sample columns are assembled in sample-ID order. Gene names can be missing where the reference does not provide them. Zero TPM indicates no estimated abundance for that gene in the corresponding sample; it does not by itself establish biological absence.
 
 Additional outputs include gene counts, scaled count matrices, gene lengths, transcript TPM and transcript counts. Salmon-derived counts are estimated abundances, not necessarily integer read counts. TPM describes relative abundance; this pipeline does not perform differential-expression testing.
+
+### Output validation
+
+After a successful run, validate the published outputs:
+
+```bash
+python bin/validate_outputs.py \
+    --samplesheet assets/samplesheet_test.csv \
+    --outdir results_test_fastp \
+    --trimmer fastp
+```
+
+For the Trim Galore branch, use `--trimmer trimgalore` and its
+corresponding output directory.
+
+The script checks sample columns, unique gene IDs, finite non-negative
+TPM values, paired FASTQ structure and matching read IDs, and the
+presence of non-empty key output files. TPM sums are reported as an
+informational normalization check.
+
+Results are written to `<outdir>/validation_report.tsv`.
+Failed checks return a non-zero exit code. BAM and index checks verify
+file existence and size, not internal integrity.
+
+Before the latest sorting and reference-input changes, both trimming branches passed all 21 checks. Run the validator again on the updated workflow outputs.
 
 ### Checking a completed test
 
@@ -353,9 +403,10 @@ Tool-specific references are listed in [CITATIONS.md](CITATIONS.md). When descri
 | Nextflow | [Nextflow](https://www.nextflow.io/) |
 | FastQC | [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) |
 | Trim Galore | [Trim Galore](https://github.com/FelixKrueger/TrimGalore) |
+| fastp | [fastp](https://github.com/OpenGene/fastp) |
 | STAR | [STAR](https://github.com/alexdobin/STAR) |
 | GFFREAD | [GFFREAD](https://github.com/gpertea/gffread) |
-| samtools | [samtools](https://www.htslib.org/) |
+| samtools (included in the STAR module environment) | [samtools](https://www.htslib.org/) |
 | Picard | [Picard](https://broadinstitute.github.io/picard/) |
 | Salmon | [Salmon](https://combine-lab.github.io/salmon/) |
 | tximport / tximeta | [tximport](https://bioconductor.org/packages/tximport/), [tximeta](https://bioconductor.org/packages/tximeta/) |

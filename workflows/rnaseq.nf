@@ -16,7 +16,6 @@ include { STAR_GENOMEGENERATE } from '../modules/nf-core/star/genomegenerate/mai
 include { GFFREAD             } from '../modules/nf-core/gffread/main'
 include { STAR_ALIGN   } from '../modules/nf-core/star/align/main'
 include { SALMON_QUANT } from '../modules/nf-core/salmon/quant/main'
-include { SAMTOOLS_SORT         } from '../modules/nf-core/samtools/sort/main'
 include { PICARD_MARKDUPLICATES } from '../modules/nf-core/picard/markduplicates/main'
 include { CUSTOM_TX2GENE } from '../modules/nf-core/custom/tx2gene/main'
 include { TXIMETA_TXIMPORT } from '../modules/nf-core/tximeta/tximport/main'
@@ -60,11 +59,38 @@ workflow RNASEQ {
     )
 
     STAR_GENOMEGENERATE(ch_fasta, ch_gtf)
+    //
+    // Prepare the transcript reference for Salmon
+    //
+    def ch_salmon_reference
 
-    GFFREAD(
-        ch_gtf,
-        channel.value(fasta_file)
-    )
+    if (params.transcript_fasta) {
+
+        def transcript_fasta_file = file(
+            params.transcript_fasta,
+            checkIfExists: true
+        )
+
+        ch_salmon_reference = channel.value([
+            [id: 'reference'],
+            [],
+            gtf_file,
+            transcript_fasta_file
+        ])
+
+    } else {
+
+        GFFREAD(
+            ch_gtf,
+            channel.value(fasta_file)
+        )
+
+        ch_salmon_reference = GFFREAD.out.gffread_fasta
+            .map { meta, transcript_fasta ->
+                [meta, [], gtf_file, transcript_fasta]
+            }
+            .first()
+    }
     //
     // MODULE: Run FastQC
     //
@@ -168,14 +194,8 @@ workflow RNASEQ {
         [[id: 'reference'], [], []]
     )
 
-    SAMTOOLS_SORT(
-        STAR_ALIGN.out.bam,
-        ch_bam_reference,
-        ''
-    )
-
     PICARD_MARKDUPLICATES(
-        SAMTOOLS_SORT.out.bam,
+        STAR_ALIGN.out.bam_sorted_aligned,
         ch_bam_reference
     )
 
@@ -185,12 +205,6 @@ workflow RNASEQ {
     //
     // MODULE: Quantify transcript alignments with Salmon
     //
-    def ch_salmon_reference = GFFREAD.out.gffread_fasta
-        .map { meta, transcript_fasta ->
-            [meta, [], gtf_file, transcript_fasta]
-        }
-        .first()
-
     SALMON_QUANT(
         STAR_ALIGN.out.bam_transcript,
         ch_salmon_reference

@@ -82,6 +82,12 @@
                     "help_text": "Used by STAR and GFFREAD. Must match the reference genome assembly and chromosome names.",
                     "fa_icon": "far fa-file-code"
                 },
+                "transcript_fasta": {
+                    "type": "string",
+                    "format": "file-path",
+                    "exists": true,
+                    "description": "Optional transcript FASTA. If provided, skip GFFREAD; otherwise generate transcripts from the genome FASTA and GTF."
+                },
                 "igenomes_ignore": {
                     "type": "boolean",
                     "description": "Do not load the iGenomes reference config.",
