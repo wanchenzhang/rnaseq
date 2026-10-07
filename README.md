@@ -27,49 +27,7 @@ Repository: [wanchenzhang/rnaseq](https://github.com/wanchenzhang/rnaseq).
 
 ### Workflow map
 
-
-```mermaid
-flowchart TD
-    S[Samplesheet: sample and FASTQ paths] --> C[CAT_FASTQ: merge runs by sample]
-    C --> R[Single-end reads or paired R1 and R2]
-    R --> Q1[FastQC: raw reads]
-    R --> T[Trim Galore]
-    T --> Q2[FastQC: trimmed reads]
-    F[Reference genome FASTA] --> IDX[STAR genomeGenerate]
-    G[Matching GTF annotation] --> IDX
-    P{Transcript FASTA supplied?}
-    P -->|Yes| PROVIDED[Provided transcript FASTA]
-    P -->|No| GF[GFFREAD: generate transcript FASTA]
-    F --> GF
-    G --> GF
-    PROVIDED --> TF[Transcript FASTA for Salmon]
-    GF --> TF
-    IDX --> A[STAR alignment]
-    T --> A
-    A --> GB[Coordinate-sorted genome BAM]
-    GB --> MD[Picard MarkDuplicates]
-    MD --> MB[Duplicate-marked BAM, index and metrics]
-    A --> TB[Transcriptome BAM]
-    TB --> SA[Salmon: alignment-based quantification]
-    TF --> SA
-    G --> SA
-    SA --> QU[Per-sample quantifications]
-    QU --> TX[CUSTOM_TX2GENE]
-    G --> TX
-    TX --> TI[TXIMETA_TXIMPORT: aggregate all samples]
-    QU --> TI
-    TI --> TPM[Gene-by-sample TPM and count matrices]
-    Q1 --> MQ[MultiQC report]
-    Q2 --> MQ
-    T -. Trimming logs .-> MQ
-    A -. Alignment metrics .-> MQ
-    MD -. Duplication metrics .-> MQ
-    SA -. Quantification metrics .-> MQ
-```
-
-Solid arrows show data flow. Dashed arrows show metrics or logs supplied to MultiQC; whether a section appears depends on parser support and the available files.
-
-**Duplicate marking and expression quantification are separate branches.** Picard marks duplicates in STAR's coordinate-sorted genome BAM and retains them (`REMOVE_DUPLICATES=false`). Salmon uses STAR's transcriptome BAM, not the duplicate-marked genome BAM. Duplicate marking therefore does not alter the current TPM calculation.
+![RNA-seq pipeline workflow](metro_map.svg)
 
 ## Usage
 
