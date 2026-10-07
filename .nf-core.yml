@@ -12,6 +12,8 @@ lint:
     - .github/PULL_REQUEST_TEMPLATE.md
     - assets/email_template.txt
     - docs/README.md
+    - .gitignore
+    - assets/email_template.html
   nextflow_config:
     - manifest.name
     - manifest.homePage
