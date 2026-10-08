@@ -12,6 +12,28 @@
             "description": "Define where the pipeline should find input data and save output data.",
             "required": ["input", "outdir"],
             "properties": {
+                "trimmer": {
+                    "type": "string",
+                    "enum": ["trimgalore", "fastp"],
+                    "default": "trimgalore",
+                    "description": "Choose the tool for adapter trimming and read filtering."
+                },
+                "fastp_trim_poly_x": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable polyX tail trimming when using fastp."
+                },
+                "fastp_poly_g": {
+                    "type": "string",
+                    "enum": ["auto", "on", "off"],
+                    "default": "auto",
+                    "description": "Control fastp polyG trimming: automatic detection, always on, or off."
+                },
+                "fastp_correction": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable base correction in overlapping paired-end reads when using fastp."
+                },
                 "input": {
                     "type": "string",
                     "format": "file-path",
@@ -23,6 +45,7 @@
                     "help_text": "You will need to create a design file with information about the samples in your experiment before running the pipeline. Use this parameter to specify its location. It has to be a comma-separated file with 3 columns, and a header row.",
                     "fa_icon": "fas fa-file-csv"
                 },
+                
                 "outdir": {
                     "type": "string",
                     "format": "directory-path",

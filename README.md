@@ -17,7 +17,7 @@ Repository: [wanchenzhang/rnaseq](https://github.com/wanchenzhang/rnaseq).
 1. Validate the samplesheet and group sequencing runs by sample.
 2. Merge FASTQ files from the same sample with **CAT_FASTQ**, keeping paired-end R1 and R2 files separate.
 3. Assess input-read quality with **FastQC**.
-4. Trim adapters and filter reads with **Trim Galore**.
+4. Trim adapters and filter reads with **Trim Galore** (default) or **fastp** (`--trimmer fastp`).
 5. Assess trimmed-read quality with **FastQC**.
 6. Build a reference index with **STAR genomeGenerate**. Use the supplied `--transcript_fasta`, or generate transcript sequences with **GFFREAD** when it is not supplied.
 7. Align trimmed reads with **STAR**, producing a coordinate-sorted genome BAM and a transcriptome BAM.
@@ -43,7 +43,7 @@ Repository: [wanchenzhang/rnaseq](https://github.com/wanchenzhang/rnaseq).
 - Internet access for public test inputs, Nextflow plugins and container downloads.
 - Sufficient disk space for downloaded inputs, task files and published outputs.
 
-Docker is the execution profile validated for this project. Other profiles inherited from the template have not been validated here.
+Docker is the container execution profile tested for this project. Other profiles inherited from the template have not been validated here.
 
 The test profile limits each task to at most **4 CPUs, 4 GB RAM and one hour**. These are per-task limits, not a 4 GB limit for the entire run; simultaneous tasks can use more memory. Allow additional memory for Nextflow, Docker and the operating system.
 
@@ -83,9 +83,11 @@ These URLs follow the repository's `rnaseq` branch and can change. The small ref
 
 #### Validation status
 
-An earlier three-sample paired-end test completed successfully on 6 October 2026, producing a 7,126-gene TPM matrix and the expected BAM, quantification and QC outputs. Those results used a different test reference setup.
+The official five-sample test has completed with Trim Galore and with fastp using the `fastp_optional` profile. The latter enables polyX trimming and paired-end overlap correction. Both runs produced STAR alignment logs and MultiQC reports for all five samples.
 
-The current version adds multi-run FASTQ merging, STAR internal sorting and an optional transcript FASTA. Re-run the current test before reporting it as validated. Its five-sample matrix and gene count should be checked against the current inputs rather than the earlier test results.
+Compared with the five-sample Trim Galore run using the same test samplesheet and reference URLs, fastp with these optional features slightly increased unique mapping percentages and reduced mismatch rates, but retained fewer uniquely mapped reads. This is a small workflow test, not evidence that either tool is universally better. The earlier three-sample benchmark used a different reference setup and should not be compared directly with these mapping percentages.
+
+Check the current TPM matrix and key output files as described below. The older output-validation script does not yet cover the mixed single-end, paired-end and multi-run test inputs.
 
 ### Running your own samples
 
@@ -116,7 +118,7 @@ The supplied transcript FASTA must use transcript IDs and sequences compatible w
 
 #### 3. Check resource and indexing settings
 
-Inspect `conf/modules.config` before running another organism. It currently includes a yeast-oriented STAR `--genomeSAindexNbases 10` setting and `--sjdbOverhang 149`. The test profile overrides the overhang to 100 for its 101 bp reads. Set the overhang according to the intended read length and choose a suitable index setting for your genome.
+Inspect `conf/modules.config` before running another organism. It currently includes a yeast-oriented STAR `--genomeSAindexNbases 10` setting and `--sjdbOverhang 149`. The public test reads are 101 bp long; an overhang of 100 would match that read length, but the current test config does not override the module setting. Set the overhang according to the intended read length and choose a suitable index setting for your genome.
 
 The current non-test STAR resource requests are 8 CPUs and 20 GB RAM. STAR uses `--outSAMtype BAM SortedByCoordinate` for internal sorting and `--quantMode TranscriptomeSAM` for the BAM used by Salmon. The configured `--limitBAMsortRAM 1000000000` allows approximately 1 GB for sorting; it is not the total STAR memory limit. Review both task memory and sorting memory when using larger datasets or another organism.
 
@@ -145,8 +147,44 @@ nextflow run . \
 
 Do not add the `test` profile for your own dataset unless you intentionally want its reference and resource settings.
 
+#### 5. Choose a trimming tool
+
+Trim Galore is the default. To select fastp, add `--trimmer fastp`:
+
+```bash
+nextflow run . \
+    -profile test,docker \
+    --trimmer fastp \
+    --outdir results_test_fastp
+```
+
+Both tools receive the reads merged by CAT_FASTQ. Their trimmed reads are passed to the same independent FastQC step and downstream STAR/Salmon workflow. Fastp's own HTML and JSON reports are additional QC outputs; fastp does not run FastQC. The Trim Galore configuration does not enable `--fastqc`, so the separate post-trimming FastQC step is also required for that branch.
+
+#### Optional fastp features
+
+The `fastp_optional` profile selects fastp and enables polyX tail trimming and base correction in overlapping paired-end reads:
+
+```bash
+nextflow run . \
+    -profile test,docker,fastp_optional \
+    --outdir results_test_fastp_optional
+```
+
+For your own data, use `-profile docker,fastp_optional` together with your samplesheet and reference parameters. Add `-resume` to reuse eligible cached tasks when continuing a run.
+
+| Parameter | Default | Effect when using fastp |
+|---|---|---|
+| `fastp_trim_poly_x` | `false` | Enable polyX tail trimming, including polyA |
+| `fastp_poly_g` | `'auto'` | `auto`: leave fastp's automatic detection unchanged; `on`: force polyG trimming; `off`: disable it |
+| `fastp_correction` | `false` | Enable base correction in overlapping paired-end reads; not applicable to single-end reads |
+
+For example, add `--fastp_poly_g on` or `--fastp_poly_g off` to control polyG trimming. To customize the Boolean options, edit or add a profile inside `profiles {}` in `nextflow.config`, using unquoted `true` or `false`. In the tested environment, bare command-line Boolean switches were received as strings and rejected by parameter validation; the `fastp_optional` profile avoids that issue.
+
+These options affect only fastp. PolyX trimming and correction are optional and should be chosen according to the library and QC results. UMI processing and merging overlapping paired-end reads are not enabled by this interface; the downstream workflow does not implement UMI-aware counting or a merged-read branch.
+
 | Parameter | Purpose |
 |---|---|
+| `--trimmer` | `trimgalore` (default) or `fastp` |
 | `--input` | Samplesheet CSV |
 | `--fasta` | Reference genome FASTA |
 | `--gtf` | Matching gene annotation GTF |
@@ -154,6 +192,7 @@ Do not add the `test` profile for your own dataset unless you intentionally want
 | `--outdir` | Published output directory |
 | `--multiqc_title` | Optional MultiQC report title |
 | `-profile docker` | Container execution profile |
+| `-profile docker,fastp_optional` | Docker execution with fastp, polyX trimming and paired-end correction |
 | `-resume` | Reuse eligible cached tasks from an earlier run |
 
 To inspect the pipeline's available options:
@@ -169,7 +208,8 @@ Paths below are relative to the selected output directory:
 |---|---|
 | `fastqc/` | Raw-read FastQC HTML and ZIP reports |
 | `cat/` | FASTQ files merged by sample using CAT_FASTQ |
-| `trimgalore/` | Trimmed FASTQ files and available trimming reports |
+| `trimgalore/` | Trimmed FASTQ files and available trimming reports when Trim Galore is selected |
+| `fastp/` | Trimmed FASTQ files, fastp HTML/JSON QC reports and logs when fastp is selected |
 | `fastqc_after/` | FastQC reports for trimmed reads |
 | `reference/star/` | Generated STAR genome index |
 | `reference/transcripts/` | Generated transcript FASTA; produced only when GFFREAD runs |
@@ -318,6 +358,7 @@ Tool-specific references are listed in [CITATIONS.md](CITATIONS.md). When descri
 | Nextflow | [Nextflow](https://www.nextflow.io/) |
 | FastQC | [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) |
 | Trim Galore | [Trim Galore](https://github.com/FelixKrueger/TrimGalore) |
+| fastp | [fastp](https://github.com/OpenGene/fastp) |
 | STAR | [STAR](https://github.com/alexdobin/STAR) |
 | GFFREAD | [GFFREAD](https://github.com/gpertea/gffread) |
 | Picard | [Picard](https://broadinstitute.github.io/picard/) |

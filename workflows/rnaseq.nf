@@ -6,6 +6,7 @@
 include { FASTQC                 } from '../modules/nf-core/fastqc/main'
 include { CAT_FASTQ } from '../modules/nf-core/cat/fastq/main'
 include { TRIMGALORE } from '../modules/nf-core/trimgalore/main'
+include { FASTP } from '../modules/nf-core/fastp/main'
 include { FASTQC as FASTQC_AFTER } from '../modules/nf-core/fastqc/main'
 include { MULTIQC                } from '../modules/nf-core/multiqc/main'
 include { paramsSummaryMap       } from 'plugin/nf-schema'
@@ -131,16 +132,37 @@ workflow RNASEQ {
             sort: true,
             newLine: true
         )
-    //
-    // Trim adapters and filter reads with Trim Galore
-    //
-    TRIMGALORE(ch_reads)
+    // MODULE: Trim reads
+    def ch_trimmed_reads
 
-    def ch_trimmed_reads = TRIMGALORE.out.reads
+    if (params.trimmer == 'trimgalore') {
 
-    ch_multiqc_files = ch_multiqc_files.mix(
-        TRIMGALORE.out.log.map { meta, logs -> logs }
-    )
+        TRIMGALORE(ch_reads)
+
+        ch_trimmed_reads = TRIMGALORE.out.reads
+
+        ch_multiqc_files = ch_multiqc_files.mix(
+            TRIMGALORE.out.log.map { meta, logs -> logs }
+        )
+
+    } else if (params.trimmer == 'fastp') {
+
+        FASTP(
+            ch_reads.map { meta, reads -> [meta, reads, []] },
+            false, // Keep passing trimmed reads
+            false, // Do not save failed reads
+            false  // Do not merge overlapping paired-end reads
+        )
+
+        ch_trimmed_reads = FASTP.out.reads
+
+        ch_multiqc_files = ch_multiqc_files.mix(
+            FASTP.out.json.map { meta, report -> report }
+        )
+
+    } else {
+        error "Unsupported trimmer '${params.trimmer}'. Choose trimgalore or fastp."
+    }
 
     FASTQC_AFTER(ch_trimmed_reads)
 
