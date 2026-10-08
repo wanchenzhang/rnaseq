@@ -272,17 +272,18 @@ TPM sums are a normalization check; they do not establish complete transcript-to
 
 #### Output validation script
 
-`bin/validate_outputs.py` supports single-end and paired-end samples, repeated sample IDs representing multiple runs, and the published CAT_FASTQ, Trim Galore and fastp filenames. It accepts a local samplesheet or a public HTTP(S) CSV URL; only the samplesheet is fetched, not the input FASTQs.
+`bin/validate_outputs.py` supports single-end and paired-end samples, including multiple sequencing runs per sample. It accepts a local samplesheet or a public HTTPS samplesheet URL.
 
 The script checks:
-
-- Samplesheet grouping, rejecting duplicate run rows and mixed single/paired-end runs within one sample.
-- Valid, nonempty FASTQ records in merged and trimmed outputs, and matching R1/R2 read IDs and counts for paired-end samples.
+- Samplesheet grouping and consistent read types within each sample.
+- Merged and trimmed FASTQ records, including matching R1/R2 read IDs and counts.
 - Trimmed read counts do not exceed merged read counts.
-- TPM sample columns, unique gene IDs, finite nonnegative values and informational TPM normalization sums.
-- Nonempty Salmon quantification, duplicate-marked BAM, index, Picard metrics and MultiQC files.
+- TPM matrix structure, sample names, nonnegative finite values and column sums.
+- The existence of nonempty BAM, index, Salmon quantification, Picard metrics and MultiQC files.
 
-Run it on the official five-sample test:
+Both five-sample test runs—Trim Galore and fastp with optional features—passed validation with `PASS=43 WARN=0 FAIL=0`.
+
+Example:
 
 ```bash
 python bin/validate_outputs.py \
@@ -291,9 +292,8 @@ python bin/validate_outputs.py \
     --trimmer fastp
 ```
 
-For Trim Galore, set `--trimmer trimgalore` and use its output directory. Validation of the existing `results_test_fastp_optional` and `results_test_trimgalore_only` runs returned `PASS=43 WARN=0 FAIL=0` for each. The TSV report is saved as `<outdir>/validation_report.tsv`; failures produce a nonzero exit code.
-
-BAM, index and Salmon file checks verify existence and nonempty files, not internal format integrity. Merged FASTQ checks do not compare record totals against the original input runs, so they cannot prove that every input record was included. Historical outputs without a `cat/` directory receive warnings for skipped merged-read checks. Passing validation does not establish biological validity.
+For Trim Galore, change the output directory and use `--trimmer trimgalore`.
+The report is saved as <outdir>/validation_report.tsv. BAM checks verify existence and size, not internal format integrity. Merged-read checks do not confirm that every original input record was included. Passing validation does not establish biological validity.
 
 ### Interpreting quality-control results
 
