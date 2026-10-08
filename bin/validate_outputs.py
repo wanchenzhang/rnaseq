@@ -1,32 +1,51 @@
 #!/usr/bin/env python3
-"""Validate published paired-end RNA-seq outputs using Python's standard library."""
+"""Validate single/paired-end, multi-run RNA-seq outputs using the standard library."""
 import argparse
 import csv
 import gzip
 import math
+import io
+from urllib.request import urlopen
 from itertools import zip_longest
 from pathlib import Path
 
 
-def sample_names(path):
-    with path.open(newline='', encoding='utf-8-sig') as handle:
-        reader = csv.DictReader(handle)
-        if not {'sample', 'fastq_1', 'fastq_2'} <= set(reader.fieldnames or []):
-            raise ValueError('Samplesheet requires sample, fastq_1 and fastq_2 columns')
-        names = []
-        for row in reader:
-            name = (row.get('sample') or '').strip()
-            if not name or any(c.isspace() for c in name) or '/' in name or '\\' in name:
-                raise ValueError('Sample IDs must be nonempty, without spaces or path separators')
-            if not row.get('fastq_1') or not row.get('fastq_2'):
-                raise ValueError(f'{name}: both paired-end input paths are required')
-            names.append(name)
-    if not names or len(names) != len(set(names)):
-        raise ValueError('Samplesheet is empty or has duplicate sample IDs')
-    return names
+def load_samples(path):
+    """Group runs by sample ID; FASTQ input files are not downloaded."""
+    if str(path).startswith(('https://', 'http://')):
+        with urlopen(str(path), timeout=30) as response:
+            text = response.read().decode('utf-8-sig')
+    else:
+        text = Path(path).read_text(encoding='utf-8-sig')
+    reader = csv.DictReader(io.StringIO(text, newline=''))
+    if not {'sample', 'fastq_1', 'fastq_2'} <= set(reader.fieldnames or []):
+        raise ValueError('Samplesheet requires sample, fastq_1 and fastq_2 columns')
+    samples = {}
+    seen = set()
+    for line, row in enumerate(reader, 2):
+        if None in row or any(row.get(k) is None for k in ('sample', 'fastq_1', 'fastq_2')):
+            raise ValueError(f'Samplesheet row {line}: incorrect column count')
+        name = row['sample'].strip()
+        if not name or any(c.isspace() for c in name) or '/' in name or '\\' in name or name in ('.', '..'):
+            raise ValueError('Sample IDs must be nonempty, without spaces or path separators')
+        r1, r2 = row['fastq_1'].strip(), row['fastq_2'].strip()
+        if not r1:
+            raise ValueError(f'{name}: fastq_1 is required')
+        run = (name, r1, r2)
+        if run in seen:
+            raise ValueError(f'{name}: duplicate sequencing-run row')
+        seen.add(run)
+        paired = bool(r2)
+        if name in samples and samples[name]['paired'] != paired:
+            raise ValueError(f'{name}: cannot mix single-end and paired-end runs')
+        entry = samples.setdefault(name, {'paired': paired, 'runs': 0})
+        entry['runs'] += 1
+    if not samples:
+        raise ValueError('Samplesheet is empty')
+    return samples
 
 
-def fastq_ids(path, mate):
+def fastq_ids(path, mate=None):
     with gzip.open(path, 'rt', encoding='ascii') as handle:
         record = 0
         while True:
@@ -48,10 +67,10 @@ def fastq_ids(path, mate):
                 raise ValueError(f'{path.name}: empty read ID at record {record}')
             read_id = fields[0]
             if read_id.endswith(('/1', '/2')):
-                if not read_id.endswith(f'/{mate}'):
+                if mate is not None and not read_id.endswith(f'/{mate}'):
                     raise ValueError(f'{path.name}: incorrect mate suffix at record {record}')
                 read_id = read_id[:-2]
-            if len(fields) > 1 and fields[1].startswith(('1:', '2:')):
+            if mate is not None and len(fields) > 1 and fields[1].startswith(('1:', '2:')):
                 if not fields[1].startswith(f'{mate}:'):
                     raise ValueError(f'{path.name}: incorrect mate field at record {record}')
             yield read_id
@@ -67,6 +86,26 @@ def check_pair(r1, r2):
     if count == 0:
         raise ValueError('No read pairs remain')
     return count
+
+
+def check_single(path):
+    count = sum(1 for _ in fastq_ids(path))
+    if not count:
+        raise ValueError('No reads remain')
+    return count
+
+
+def output_fastqs(outdir, sample, paired, stage):
+    if stage == 'cat':
+        filenames = ([f'{sample}_1.merged.fastq.gz', f'{sample}_2.merged.fastq.gz']
+                     if paired else [f'{sample}.merged.fastq.gz'])
+    elif stage == 'fastp':
+        filenames = ([f'{sample}_R1.fastp.fastq.gz', f'{sample}_R2.fastp.fastq.gz']
+                     if paired else [f'{sample}.fastp.fastq.gz'])
+    else:
+        filenames = ([f'{sample}_1_val_1.fq.gz', f'{sample}_2_val_2.fq.gz']
+                     if paired else [f'{sample}_trimmed.fq.gz'])
+    return [outdir / stage / filename for filename in filenames]
 
 
 def check_tpm(path, samples):
@@ -102,7 +141,7 @@ def check_tpm(path, samples):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--samplesheet', type=Path, required=True)
+    parser.add_argument('--samplesheet', required=True, help='Local CSV path or public HTTP(S) CSV URL')
     parser.add_argument('--outdir', type=Path, required=True)
     parser.add_argument('--trimmer', choices=['fastp', 'trimgalore'], required=True)
     args = parser.parse_args()
@@ -119,10 +158,13 @@ def main():
         return ok
 
     try:
-        samples = sample_names(args.samplesheet)
-        add('ALL', 'samplesheet', 'PASS', f'{len(samples)} unique paired-end samples')
+        samples = load_samples(args.samplesheet)
+        paired = sum(entry['paired'] for entry in samples.values())
+        runs = sum(entry['runs'] for entry in samples.values())
+        add('ALL', 'samplesheet', 'PASS',
+            f'{runs} runs grouped into {len(samples)} samples; {paired} paired-end, {len(samples) - paired} single-end')
     except (OSError, ValueError, csv.Error) as error:
-        samples = []
+        samples = {}
         add('ALL', 'samplesheet', 'FAIL', str(error))
 
     if samples:
@@ -136,18 +178,31 @@ def main():
         except (OSError, ValueError, csv.Error) as error:
             add('ALL', 'TPM_structure_and_values', 'FAIL', str(error))
 
-        for name in samples:
-            if args.trimmer == 'fastp':
-                r1 = args.outdir / 'fastp' / f'{name}_R1.fastp.fastq.gz'
-                r2 = args.outdir / 'fastp' / f'{name}_R2.fastp.fastq.gz'
-            else:
-                r1 = args.outdir / 'trimgalore' / f'{name}_1_val_1.fq.gz'
-                r2 = args.outdir / 'trimgalore' / f'{name}_2_val_2.fq.gz'
-            try:
-                count = check_pair(r1, r2)
-                add(name, 'trimmed_FASTQ_pairing', 'PASS', f'{count} pairs; valid records and matching read IDs')
-            except (OSError, EOFError, ValueError, UnicodeError) as error:
-                add(name, 'trimmed_FASTQ_pairing', 'FAIL', str(error))
+        for name, entry in samples.items():
+            paired = entry['paired']
+            counts = {}
+            for stage, label in [('cat', 'merged_FASTQ'), (args.trimmer, 'trimmed_FASTQ')]:
+                # Preserve compatibility with historical results that predate CAT_FASTQ.
+                if stage == 'cat' and not (args.outdir / 'cat').is_dir():
+                    add(name, label, 'WARN', 'cat/ absent; merged-read checks skipped for historical outputs')
+                    continue
+                paths = output_fastqs(args.outdir, name, paired, stage)
+                try:
+                    count = check_pair(*paths) if paired else check_single(paths[0])
+                    counts[stage] = count
+                    unit = 'pairs' if paired else 'reads'
+                    detail = f'{count} {unit}; valid records'
+                    if paired:
+                        detail += ' and matching R1/R2 IDs'
+                    if stage == 'cat':
+                        detail += f"; {entry['runs']} input runs listed (input read totals not checked)"
+                    add(name, label, 'PASS', detail)
+                except (OSError, EOFError, ValueError, UnicodeError) as error:
+                    add(name, label, 'FAIL', str(error))
+            if 'cat' in counts and args.trimmer in counts:
+                merged, trimmed = counts['cat'], counts[args.trimmer]
+                add(name, 'trimmed_count_vs_merged', 'PASS' if trimmed <= merged else 'FAIL',
+                    f'{trimmed} trimmed / {merged} merged; {trimmed / merged:.2%} retained')
             nonempty(name, 'Salmon_quant_sf', args.outdir / 'salmon' / name / 'quant.sf')
             directory = args.outdir / 'markduplicates'
             nonempty(name, 'marked_BAM', directory / f'{name}_marked.bam')

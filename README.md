@@ -87,7 +87,7 @@ The official five-sample test has completed with Trim Galore and with fastp usin
 
 Compared with the five-sample Trim Galore run using the same test samplesheet and reference URLs, fastp with these optional features slightly increased unique mapping percentages and reduced mismatch rates, but retained fewer uniquely mapped reads. This is a small workflow test, not evidence that either tool is universally better. The earlier three-sample benchmark used a different reference setup and should not be compared directly with these mapping percentages.
 
-Check the current TPM matrix and key output files as described below. The older output-validation script does not yet cover the mixed single-end, paired-end and multi-run test inputs.
+Check the current TPM matrix and key output files as described below. The updated output-validation script passed all 43 checks for both five-sample runs; the scope and limitations of these checks are described below.
 
 ### Running your own samples
 
@@ -272,9 +272,28 @@ TPM sums are a normalization check; they do not establish complete transcript-to
 
 #### Output validation script
 
-`bin/validate_outputs.py` was written for the earlier one-row-per-sample paired-end dataset. It checks TPM structure and values, paired FASTQ records and read IDs, and non-empty key output files. BAM checks cover existence and size, not internal format integrity.
+`bin/validate_outputs.py` supports single-end and paired-end samples, repeated sample IDs representing multiple runs, and the published CAT_FASTQ, Trim Galore and fastp filenames. It accepts a local samplesheet or a public HTTP(S) CSV URL; only the samplesheet is fetched, not the input FASTQs.
 
-The script still needs updating for the current single-end inputs, repeated sample IDs and CAT_FASTQ-derived output names. Do not use the earlier 21-pass result as evidence that the current five-sample test passed validation.
+The script checks:
+
+- Samplesheet grouping, rejecting duplicate run rows and mixed single/paired-end runs within one sample.
+- Valid, nonempty FASTQ records in merged and trimmed outputs, and matching R1/R2 read IDs and counts for paired-end samples.
+- Trimmed read counts do not exceed merged read counts.
+- TPM sample columns, unique gene IDs, finite nonnegative values and informational TPM normalization sums.
+- Nonempty Salmon quantification, duplicate-marked BAM, index, Picard metrics and MultiQC files.
+
+Run it on the official five-sample test:
+
+```bash
+python bin/validate_outputs.py \
+    --samplesheet https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/samplesheet/v3.10/samplesheet_test.csv \
+    --outdir results_test_fastp_optional \
+    --trimmer fastp
+```
+
+For Trim Galore, set `--trimmer trimgalore` and use its output directory. Validation of the existing `results_test_fastp_optional` and `results_test_trimgalore_only` runs returned `PASS=43 WARN=0 FAIL=0` for each. The TSV report is saved as `<outdir>/validation_report.tsv`; failures produce a nonzero exit code.
+
+BAM, index and Salmon file checks verify existence and nonempty files, not internal format integrity. Merged FASTQ checks do not compare record totals against the original input runs, so they cannot prove that every input record was included. Historical outputs without a `cat/` directory receive warnings for skipped merged-read checks. Passing validation does not establish biological validity.
 
 ### Interpreting quality-control results
 
@@ -331,7 +350,7 @@ assets/schema_input.json
 assets/samplesheet_test.csv
                         Earlier three-sample example (not the current test default)
 bin/validate_outputs.py
-                        Output validator for the earlier paired-end test
+                        Output validator for single/paired-end and multi-run tests
 modules/nf-core/        Reused tool modules
 subworkflows/           Initialisation, completion and utility workflows
 ```
