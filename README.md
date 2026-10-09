@@ -363,7 +363,7 @@ Keep source code, configuration, documentation and the test samplesheet in Git. 
 
 ## Credits
 
-computational-workflows/rnaseq was developed by **Wanchen Zhang and Kritika Manna** for the Computational Workflows course.
+computational-workflows/rnaseq was developed by **Wanchen Zhang and Kritika Manna** for the Computational Workflows course. Both authors contributed to the project; all commits were made from a single shared device.
 
 We acknowledge the nf-core community for the template, reusable modules and public test datasets, and the developers of the tools integrated into this workflow.
 
