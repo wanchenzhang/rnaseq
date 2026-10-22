@@ -3,7 +3,10 @@ repository_type: pipeline
 nf_core_version: 4.1.0
 
 lint:
+  template_strings:
+    - RNA_seq_workflow.pdf
   files_unchanged:
+    - .github/workflows/linting.yml # Also run checks on master pushes and manual dispatches.
     - CODE_OF_CONDUCT.md
     - assets/nf-core-rnaseq_logo_light.png
     - docs/images/nf-core-rnaseq_logo_light.png
@@ -33,7 +36,7 @@ template:
   name: rnaseq
   description: analysis of RNA sequencing data
   author: Wanchen Zhang, Kritika Manna
-  version: 1.0.0dev
+  version: 1.0.0
   force: true
   outdir: .
   skip_features:

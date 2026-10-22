@@ -13,15 +13,15 @@ This preliminary benchmark compares the two trimming branches of our custom RNA-
 
 ## Results
 
-| Metric | fastp | Trim Galore |
-| --- | ---: | ---: |
-| Overall read-pair retention | 95.60% | 99.53% |
-| Mean trimming task execution time | 1.967 s | 0.391 s |
-| Peak memory range recorded in the Nextflow trace | 353.3 MB - 1.1 GB | 8.7 - 8.8 MB |
-| STAR accepted alignment rate | 55.41% - 60.58% | 55.32% - 60.42% |
-| Post-trimming per-base sequence quality | PASS in all six reports | PASS in all six reports |
-| Post-trimming adapter-content check | PASS in all six reports | PASS in all six reports |
-| Post-trimming overrepresented-sequence check | WARN in all six reports | WARN in all six reports |
+| Metric                                           |                   fastp |             Trim Galore |
+| ------------------------------------------------ | ----------------------: | ----------------------: |
+| Overall read-pair retention                      |                  95.60% |                  99.53% |
+| Mean trimming task execution time                |                 1.967 s |                 0.391 s |
+| Peak memory range recorded in the Nextflow trace |       353.3 MB - 1.1 GB |            8.7 - 8.8 MB |
+| STAR accepted alignment rate                     |         55.41% - 60.58% |         55.32% - 60.42% |
+| Post-trimming per-base sequence quality          | PASS in all six reports | PASS in all six reports |
+| Post-trimming adapter-content check              | PASS in all six reports | PASS in all six reports |
+| Post-trimming overrepresented-sequence check     | WARN in all six reports | WARN in all six reports |
 
 Each branch produces six post-trimming FastQC reports: three samples multiplied by R1 and R2. These are not six biological samples.
 

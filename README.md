@@ -11,6 +11,7 @@
 
 Repository: [wanchenzhang/rnaseq](https://github.com/wanchenzhang/rnaseq).
 
+Project report: [RNA-seq workflow report (PDF)](https://github.com/wanchenzhang/rnaseq/releases/download/v1.0.0/RNA_seq_workflow.pdf).
 
 ### Pipeline steps
 
@@ -58,6 +59,8 @@ nextflow run . -profile test,docker --outdir results_test
 
 The test profile provides a public samplesheet, genome FASTA, GTF and transcript FASTA automatically. Since the transcript FASTA is supplied, the default test skips GFFREAD. No personal filesystem paths or separately prepared local reference files are required. Run the first validation without `-resume`.
 
+The inherited `test_full` profile is an alias of this same small integration test; a separate full-size test dataset has not been configured.
+
 #### Test dataset
 
 The current `conf/test.config` uses the RNA-seq test files from [nf-core/test-datasets](https://github.com/nf-core/test-datasets/tree/rnaseq):
@@ -69,13 +72,13 @@ The current `conf/test.config` uses the RNA-seq test files from [nf-core/test-da
 
 The samplesheet contains yeast RNA-seq subsets from GSE110004, including single-end inputs and multiple sequencing runs for some samples:
 
-| Sample | Runs | Input type |
-|---|---|---|
-| WT_REP1 | SRR6357070, SRR6357071 | Paired-end; two runs |
-| WT_REP2 | SRR6357072 | Paired-end; one run |
-| RAP1_UNINDUCED_REP1 | SRR6357073 | Single-end; one run |
+| Sample              | Runs                   | Input type           |
+| ------------------- | ---------------------- | -------------------- |
+| WT_REP1             | SRR6357070, SRR6357071 | Paired-end; two runs |
+| WT_REP2             | SRR6357072             | Paired-end; one run  |
+| RAP1_UNINDUCED_REP1 | SRR6357073             | Single-end; one run  |
 | RAP1_UNINDUCED_REP2 | SRR6357074, SRR6357075 | Single-end; two runs |
-| RAP1_IAA_30M_REP1 | SRR6357076 | Paired-end; one run |
+| RAP1_IAA_30M_REP1   | SRR6357076             | Paired-end; one run  |
 
 Seven samplesheet rows are grouped into five samples. CAT_FASTQ concatenates all R1 files and all R2 files separately for paired-end samples, or all reads for single-end samples. The samplesheet's `strandedness` column is not used by this implementation; Salmon currently infers library type using `--libType A`.
 
@@ -172,53 +175,54 @@ nextflow run . \
 
 For your own data, use `-profile docker,fastp_optional` together with your samplesheet and reference parameters. Add `-resume` to reuse eligible cached tasks when continuing a run.
 
-| Parameter | Default | Effect when using fastp |
-|---|---|---|
-| `fastp_trim_poly_x` | `false` | Enable polyX tail trimming, including polyA |
-| `fastp_poly_g` | `'auto'` | `auto`: leave fastp's automatic detection unchanged; `on`: force polyG trimming; `off`: disable it |
-| `fastp_correction` | `false` | Enable base correction in overlapping paired-end reads; not applicable to single-end reads |
+| Parameter           | Default  | Effect when using fastp                                                                            |
+| ------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `fastp_trim_poly_x` | `false`  | Enable polyX tail trimming, including polyA                                                        |
+| `fastp_poly_g`      | `'auto'` | `auto`: leave fastp's automatic detection unchanged; `on`: force polyG trimming; `off`: disable it |
+| `fastp_correction`  | `false`  | Enable base correction in overlapping paired-end reads; not applicable to single-end reads         |
 
 For example, add `--fastp_poly_g on` or `--fastp_poly_g off` to control polyG trimming. To customize the Boolean options, edit or add a profile inside `profiles {}` in `nextflow.config`, using unquoted `true` or `false`. In the tested environment, bare command-line Boolean switches were received as strings and rejected by parameter validation; the `fastp_optional` profile avoids that issue.
 
 These options affect only fastp. PolyX trimming and correction are optional and should be chosen according to the library and QC results. UMI processing and merging overlapping paired-end reads are not enabled by this interface; the downstream workflow does not implement UMI-aware counting or a merged-read branch.
 
-| Parameter | Purpose |
-|---|---|
-| `--trimmer` | `trimgalore` (default) or `fastp` |
-| `--input` | Samplesheet CSV |
-| `--fasta` | Reference genome FASTA |
-| `--gtf` | Matching gene annotation GTF |
-| `--transcript_fasta` | Optional matching transcript FASTA; skips GFFREAD when supplied |
-| `--outdir` | Published output directory |
-| `--multiqc_title` | Optional MultiQC report title |
-| `-profile docker` | Container execution profile |
+| Parameter                        | Purpose                                                               |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `--trimmer`                      | `trimgalore` (default) or `fastp`                                     |
+| `--input`                        | Samplesheet CSV                                                       |
+| `--fasta`                        | Reference genome FASTA                                                |
+| `--gtf`                          | Matching gene annotation GTF                                          |
+| `--transcript_fasta`             | Optional matching transcript FASTA; skips GFFREAD when supplied       |
+| `--outdir`                       | Published output directory                                            |
+| `--multiqc_title`                | Optional MultiQC report title                                         |
+| `-profile docker`                | Container execution profile                                           |
 | `-profile docker,fastp_optional` | Docker execution with fastp, polyX trimming and paired-end correction |
-| `-resume` | Reuse eligible cached tasks from an earlier run |
+| `-resume`                        | Reuse eligible cached tasks from an earlier run                       |
 
 To inspect the pipeline's available options:
 
 ```bash
 nextflow run . --help
 ```
+
 ### Outputs
 
 Paths below are relative to the selected output directory:
 
-| Directory | Contents |
-|---|---|
-| `fastqc/` | Raw-read FastQC HTML and ZIP reports |
-| `cat/` | FASTQ files merged by sample using CAT_FASTQ |
-| `trimgalore/` | Trimmed FASTQ files and available trimming reports when Trim Galore is selected |
-| `fastp/` | Trimmed FASTQ files, fastp HTML/JSON QC reports and logs when fastp is selected |
-| `fastqc_after/` | FastQC reports for trimmed reads |
-| `reference/star/` | Generated STAR genome index |
-| `reference/transcripts/` | Generated transcript FASTA; produced only when GFFREAD runs |
-| `star/` | Coordinate-sorted genome BAM (`*.Aligned.sortedByCoord.out.bam`), transcriptome BAM and STAR logs |
-| `markduplicates/` | Duplicate-marked BAM files, indexes and Picard metrics |
-| `salmon/<sample>/` | Per-sample Salmon quantification outputs |
-| `tximport/` | Transcript-to-gene mapping and merged abundance matrices |
-| `multiqc/` | `multiqc_report.html` and supporting report data |
-| `pipeline_info/` | Execution report, trace, timeline, workflow DAG, parameters and software versions |
+| Directory                | Contents                                                                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------------- |
+| `fastqc/`                | Raw-read FastQC HTML and ZIP reports                                                              |
+| `cat/`                   | FASTQ files merged by sample using CAT_FASTQ                                                      |
+| `trimgalore/`            | Trimmed FASTQ files and available trimming reports when Trim Galore is selected                   |
+| `fastp/`                 | Trimmed FASTQ files, fastp HTML/JSON QC reports and logs when fastp is selected                   |
+| `fastqc_after/`          | FastQC reports for trimmed reads                                                                  |
+| `reference/star/`        | Generated STAR genome index                                                                       |
+| `reference/transcripts/` | Generated transcript FASTA; produced only when GFFREAD runs                                       |
+| `star/`                  | Coordinate-sorted genome BAM (`*.Aligned.sortedByCoord.out.bam`), transcriptome BAM and STAR logs |
+| `markduplicates/`        | Duplicate-marked BAM files, indexes and Picard metrics                                            |
+| `salmon/<sample>/`       | Per-sample Salmon quantification outputs                                                          |
+| `tximport/`              | Transcript-to-gene mapping and merged abundance matrices                                          |
+| `multiqc/`               | `multiqc_report.html` and supporting report data                                                  |
+| `pipeline_info/`         | Execution report, trace, timeline, workflow DAG, parameters and software versions                 |
 
 #### Gene TPM matrix
 
@@ -275,6 +279,7 @@ TPM sums are a normalization check; they do not establish complete transcript-to
 `bin/validate_outputs.py` supports single-end and paired-end samples, including multiple sequencing runs per sample. It accepts a local samplesheet or a public HTTPS samplesheet URL.
 
 The script checks:
+
 - Samplesheet grouping and consistent read types within each sample.
 - Merged and trimmed FASTQ records, including matching R1/R2 read IDs and counts.
 - Trimmed read counts do not exceed merged read counts.
@@ -324,15 +329,15 @@ For a fresh timing measurement on Linux or WSL, omit `-resume`:
 
 ### Troubleshooting
 
-| Problem | What to check |
-|---|---|
-| Config parsing error such as `Unexpected input: <EOF>` | Balanced braces and quotes in the configuration named by the error |
-| Requested memory exceeds available memory | Task requests, profile overrides, and memory available to WSL/Docker |
-| Exit status 137 | Possible operating-system or container memory kill; confirm using system/container logs |
-| Missing input or reference | Samplesheet entries, local paths, public URL availability and matching FASTA/GTF |
-| STAR reports many reads mapped to too many loci | Repetitive sequence content and alignment filtering; investigate before changing thresholds |
-| An expected MultiQC section is absent | Published logs, files supplied to MultiQC and parser compatibility |
-| Several execution reports exist | Match report/trace timestamps to the run being assessed |
+| Problem                                                | What to check                                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Config parsing error such as `Unexpected input: <EOF>` | Balanced braces and quotes in the configuration named by the error                          |
+| Requested memory exceeds available memory              | Task requests, profile overrides, and memory available to WSL/Docker                        |
+| Exit status 137                                        | Possible operating-system or container memory kill; confirm using system/container logs     |
+| Missing input or reference                             | Samplesheet entries, local paths, public URL availability and matching FASTA/GTF            |
+| STAR reports many reads mapped to too many loci        | Repetitive sequence content and alignment filtering; investigate before changing thresholds |
+| An expected MultiQC section is absent                  | Published logs, files supplied to MultiQC and parser compatibility                          |
+| Several execution reports exist                        | Match report/trace timestamps to the run being assessed                                     |
 
 Start with `.nextflow.log`. For failed tasks, inspect `.command.sh`, `.command.err` and `.command.log` in the work directory reported by Nextflow.
 
@@ -357,7 +362,6 @@ subworkflows/           Initialisation, completion and utility workflows
 
 Keep source code, configuration, documentation and the test samplesheet in Git. Generated outputs, downloaded data, task directories and credentials should not be committed.
 
-
 > [!NOTE]
 > Supply analysis parameters using the command line or Nextflow `-params-file`. The built-in test profile supplies its own test parameters. Use `-c` configuration files for execution settings such as process resources; see the [nf-core parameter guidance](https://nf-co.re/docs/running/run-pipelines#using-parameter-files).
 
@@ -367,24 +371,23 @@ computational-workflows/rnaseq was developed by **Wanchen Zhang and Kritika Mann
 
 We acknowledge the nf-core community for the template, reusable modules and public test datasets, and the developers of the tools integrated into this workflow.
 
-
 ## Citations
 
 Tool-specific references are listed in [CITATIONS.md](CITATIONS.md). When describing this pipeline, cite the tools and versions actually used; software-version records are saved under `pipeline_info/`.
 
-| Component | Resource |
-|---|---|
-| Nextflow | [Nextflow](https://www.nextflow.io/) |
-| FastQC | [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) |
-| Trim Galore | [Trim Galore](https://github.com/FelixKrueger/TrimGalore) |
-| fastp | [fastp](https://github.com/OpenGene/fastp) |
-| STAR | [STAR](https://github.com/alexdobin/STAR) |
-| GFFREAD | [GFFREAD](https://github.com/gpertea/gffread) |
-| Picard | [Picard](https://broadinstitute.github.io/picard/) |
-| Salmon | [Salmon](https://combine-lab.github.io/salmon/) |
-| tximport / tximeta | [tximport](https://bioconductor.org/packages/tximport/), [tximeta](https://bioconductor.org/packages/tximeta/) |
-| MultiQC | [MultiQC](https://multiqc.info/) |
-| CAT_FASTQ | [nf-core cat/fastq module](https://github.com/nf-core/modules/tree/master/modules/nf-core/cat/fastq) |
+| Component                 | Resource                                                                                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nextflow                  | [Nextflow](https://www.nextflow.io/)                                                                                                                             |
+| FastQC                    | [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)                                                                                             |
+| Trim Galore               | [Trim Galore](https://github.com/FelixKrueger/TrimGalore)                                                                                                        |
+| fastp                     | [fastp](https://github.com/OpenGene/fastp)                                                                                                                       |
+| STAR                      | [STAR](https://github.com/alexdobin/STAR)                                                                                                                        |
+| GFFREAD                   | [GFFREAD](https://github.com/gpertea/gffread)                                                                                                                    |
+| Picard                    | [Picard](https://broadinstitute.github.io/picard/)                                                                                                               |
+| Salmon                    | [Salmon](https://combine-lab.github.io/salmon/)                                                                                                                  |
+| tximport / tximeta        | [tximport](https://bioconductor.org/packages/tximport/), [tximeta](https://bioconductor.org/packages/tximeta/)                                                   |
+| MultiQC                   | [MultiQC](https://multiqc.info/)                                                                                                                                 |
+| CAT_FASTQ                 | [nf-core cat/fastq module](https://github.com/nf-core/modules/tree/master/modules/nf-core/cat/fastq)                                                             |
 | Test reads and references | [nf-core RNA-seq test datasets](https://github.com/nf-core/test-datasets/tree/rnaseq), [GSE110004](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE110004) |
 
 This pipeline uses code and infrastructure developed and maintained by the [nf-core](https://nf-co.re) community, reused under the MIT license.
@@ -393,6 +396,6 @@ This pipeline uses code and infrastructure developed and maintained by the [nf-c
 >
 > Philip Ewels, Alexander Peltzer, Sven Fillinger, Harshil Patel, Johannes Alneberg, Andreas Wilm, Maxime Ulysse Garcia, Paolo Di Tommaso & Sven Nahnsen.
 >
-> *Nature Biotechnology* (2020). doi: [10.1038/s41587-020-0439-x](https://doi.org/10.1038/s41587-020-0439-x).
+> _Nature Biotechnology_ (2020). doi: [10.1038/s41587-020-0439-x](https://doi.org/10.1038/s41587-020-0439-x).
 
 The project is licensed under the [MIT License](LICENSE).

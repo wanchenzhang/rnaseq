@@ -173,7 +173,7 @@ workflow RNASEQ {
     // MODULE: Align trimmed reads with STAR
     //
     def ch_star_index = STAR_GENOMEGENERATE.out.index.first() // for multiple samples, only take the first index (they are all the same)
-    
+
     STAR_ALIGN(
         ch_trimmed_reads,
         ch_star_index,

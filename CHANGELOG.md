@@ -1,16 +1,17 @@
 # computational-workflows/rnaseq: Changelog
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## Unreleased
 
-## v1.0.0dev - [unreleased<!-- TODO nf-core: replace with date on release -->]
+- Exclude the report PDF from the template-placeholder check while retaining checks on source files.
+- Correct repository metadata and update usage and output documentation.
+- Replace the unused viral-reconstruction full-test example with an explicitly documented alias of the working integration test.
+- Normalize formatting and ignore local nf-test caches.
 
-Initial release of computational-workflows/rnaseq, created with the [nf-core](https://nf-co.re/) template.
+## v1.0.0 - 2026-10-09
 
-### `Added`
-
-### `Fixed`
-
-### `Dependencies`
-
-### `Deprecated`
+- Develop a short-read bulk RNA-seq workflow from the nf-core template and reusable modules.
+- Support single-end, paired-end and multiple sequencing runs per sample through CAT_FASTQ.
+- Provide Trim Galore and fastp branches, with optional fastp preprocessing features.
+- Connect STAR alignment and internal sorting, Picard duplicate marking, Salmon quantification and tximport aggregation.
+- Generate MultiQC reports and Nextflow execution records.
+- Add a five-sample public test profile and Python output validation.
