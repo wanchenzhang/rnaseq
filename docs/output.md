@@ -1,6 +1,6 @@
 # computational-workflows/rnaseq: Output
 
-Paths are relative to `--outdir`. The [README](../README.md#outputs) explains the outputs and their interpretation in more detail.
+Paths are relative to `--outdir`. The [README](../README.md#main-outputs) explains the outputs and their interpretation in more detail.
 
 | Directory                 | Output                                                                                   |
 | ------------------------- | ---------------------------------------------------------------------------------------- |
