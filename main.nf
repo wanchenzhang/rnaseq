@@ -3,7 +3,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     computational-workflows/rnaseq
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    Github : https://github.com/computational-workflows/rnaseq
+    Github : https://github.com/wanchenzhang/rnaseq
 ----------------------------------------------------------------------------------------
 */
 
@@ -24,11 +24,7 @@ include { getGenomeAttribute      } from './subworkflows/local/utils_nfcore_rnas
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
-// TODO nf-core: Remove this line if you don't need a FASTA file
-//   This is an example of how to use getGenomeAttribute() to fetch parameters
-//   from igenomes.config using `--genome`
-// If `--fasta` is provided, use it with priority;
-//  otherwise retrieve the value from the configuration corresponding to `--genome`.
+// Use --fasta when supplied; otherwise look up the selected genome.
 params.fasta = params.fasta ?: getGenomeAttribute('fasta')
 
 /*

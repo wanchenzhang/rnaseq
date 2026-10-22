@@ -18,6 +18,23 @@
 
 > Ewels P, Magnusson M, Lundin S, Käller M. MultiQC: summarize analysis results for multiple tools and samples in a single report. Bioinformatics. 2016 Oct 1;32(19):3047-8. doi: 10.1093/bioinformatics/btw354. Epub 2016 Jun 16. PubMed PMID: 27312411; PubMed Central PMCID: PMC5039924.
 
+## Other pipeline tools
+
+- **Trim Galore**: [official documentation](https://github.com/FelixKrueger/TrimGalore).
+- **fastp**: [official documentation](https://github.com/OpenGene/fastp).
+- **STAR**: Dobin A et al. STAR: ultrafast universal RNA-seq aligner. _Bioinformatics_. 2013;29:15-21. [doi:10.1093/bioinformatics/bts635](https://doi.org/10.1093/bioinformatics/bts635).
+- **GFFREAD**: [official documentation](https://github.com/gpertea/gffread).
+- **Picard MarkDuplicates**: [official documentation](https://broadinstitute.github.io/picard/).
+- **Salmon**: Patro R et al. Salmon provides fast and bias-aware quantification of transcript expression. _Nature Methods_. 2017;14:417-419. [doi:10.1038/nmeth.4197](https://doi.org/10.1038/nmeth.4197).
+- **tximport**: Soneson C, Love MI, Robinson MD. Differential analyses for RNA-seq: transcript-level estimates improve gene-level inferences. _F1000Research_. 2015;4:1521. [doi:10.12688/f1000research.7563.1](https://doi.org/10.12688/f1000research.7563.1).
+- **tximeta**: [Bioconductor documentation](https://bioconductor.org/packages/tximeta/).
+- **CAT_FASTQ**: [nf-core module](https://github.com/nf-core/modules/tree/master/modules/nf-core/cat/fastq).
+- **CUSTOM_TX2GENE**: [nf-core module](https://github.com/nf-core/modules/tree/master/modules/nf-core/custom/tx2gene).
+- **TXIMETA_TXIMPORT**: [nf-core module](https://github.com/nf-core/modules/tree/master/modules/nf-core/tximeta/tximport).
+- **Test data**: [nf-core RNA-seq test datasets](https://github.com/nf-core/test-datasets/tree/rnaseq).
+
+Use the versions listed in the run's `pipeline_info/` folder when reporting an analysis.
+
 ## Software packaging/containerisation tools
 
 - [Anaconda](https://anaconda.com)

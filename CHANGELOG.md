@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Simplify the README and development notes, complete tool references, and correct the MultiQC methods description.
+
 - Exclude the report PDF from the template-placeholder check while retaining checks on source files.
 - Correct repository metadata and update usage and output documentation.
 - Replace the unused viral-reconstruction full-test example with an explicitly documented alias of the working integration test.
